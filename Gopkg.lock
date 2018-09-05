@@ -2,18 +2,14 @@
 
 
 [[projects]]
-  branch = "master"
-  name = "golang.org/x/net"
-  packages = [
-    "context",
-    "internal/timeseries",
-    "trace"
-  ]
-  revision = "8a410e7b638dca158bf9e766925842f6651ff828"
+  name = "github.com/pkg/errors"
+  packages = ["."]
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bec73e7493f08f8ab3727bb108ecd38c11b0f4f0463f017822abe29b9c34cef8"
+  inputs-digest = "f8155a1c8d4b89bf7907fd37fc7f7dea0ca02c8d9f804babb9e2af98a66988dc"
   solver-name = "gps-cdcl"
   solver-version = 1

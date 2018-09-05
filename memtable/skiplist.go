@@ -39,6 +39,33 @@ func (n *node) Size() int {
 	return len(n.key) + len(n.value)
 }
 
+type Iterator struct {
+	skipList *SkipList
+	currentnode *node
+}
+
+func (i *Iterator) Valid() bool {
+	return i.currentnode != nil
+}
+
+func (i *Iterator) Rewind() {
+	offset := i.skipList.head.forward[0]
+	i.currentnode = i.skipList.nodesRepository.GetByNumber(offset)
+}
+
+func (i *Iterator) Next() {
+	offset := i.currentnode.forward[0]
+	i.currentnode = i.skipList.nodesRepository.GetByNumber(offset)
+}
+
+func (i *Iterator) Key() []byte {
+	return i.currentnode.key
+}
+
+func (i *Iterator) Value() []byte {
+	return i.currentnode.value
+}
+
 type nodesRepository struct {
 	nodes []node
 	size int
@@ -81,6 +108,12 @@ func NewSkipList() *SkipList {
 		level: 1,
 		head: &head,
 		nodesRepository: newNodesRepository(),
+	}
+}
+
+func (sl *SkipList) Getiterator() *Iterator {
+	return &Iterator{
+		skipList: sl,
 	}
 }
 

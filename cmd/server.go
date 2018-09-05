@@ -2,22 +2,16 @@ package main
 
 import (
 	"os"
-	"net/http"
-	"golang.org/x/net/trace"
-	"fmt"
+	"storage-db"
+	"time"
 )
 
 func main() {
+	db := storage_db.NewStorage()
+	db.Set([]byte("n"), []byte("value"))
+	db.Set([]byte("m"), []byte("value"))
 
-
-	http.HandleFunc("/test", func(writer http.ResponseWriter, request *http.Request) {
-		l := trace.NewEventLog("Storage", "storage")
-		l.Printf("rrrr")
-		l.Errorf("ddddd")
-
-		fmt.Println("ddd")
-	})
-	http.ListenAndServe(":3000", nil)
+	time.Sleep(50 * time.Second)
 	os.Exit(0)
 
 	//t := memtable.NewSkipList()
