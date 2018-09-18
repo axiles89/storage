@@ -1,4 +1,4 @@
-package levels
+package compactions
 
 import (
 	"encoding/binary"
@@ -8,7 +8,6 @@ import (
 	"storage-db/types"
 	"errors"
 	errors2 "github.com/pkg/errors"
-	"fmt"
 )
 
 var ErrReadNullTerm = errors.New("Error read null term")
@@ -34,6 +33,10 @@ func NewBlock(key, value []byte) *Block {
 		k: string(key),
 		v: string(value),
 	}
+}
+
+func (b *Block) Size() int {
+	return len(b.key) + len(b.value)
 }
 
 func UnmarshalBlock(r BlockReader) (*Block, error) {
@@ -63,7 +66,6 @@ func UnmarshalBlock(r BlockReader) (*Block, error) {
 
 	value := datablock[uint64(nKey)+keyLen+uint64(nValue):uint64(nKey)+keyLen+uint64(nValue)+valueLen]
 	block := NewBlock(key, value)
-	fmt.Println(string(key), string(value))
 	return block, nil
 }
 
@@ -96,11 +98,13 @@ func MarshalBlock(b *Block) []byte {
 type Table struct {
 	f *os.File
 	id int64
+	size int
 }
 
-func NewTable(f *os.File, id int64) *Table {
+func NewTable(f *os.File, id int64, size int) *Table {
 	return &Table{
 		f:f,
 		id:id,
+		size:size,
 	}
 }

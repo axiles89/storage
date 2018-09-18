@@ -1,0 +1,4 @@
+{
+  "memtableSize": 100,
+  "fileNumCompactionTrigger": 2
+}

@@ -6,7 +6,7 @@ import (
 	"time"
 	"fmt"
 	"storage-db/types"
-	"storage-db/levels"
+	"storage-db/compactions"
 	"os"
 	"github.com/pkg/errors"
 	"bytes"
@@ -19,19 +19,30 @@ type Db struct {
 	qmt []*memtable.SkipList
 	flushChan chan *memtable.SkipList
 	writeChan chan *types.Entity
+	compactController *Controller
+	Config *Config
 	sync.Mutex
 }
 
-func NewStorage() *Db {
+func NewStorage(cfg *Config) (*Db, error) {
 	db := &Db{
 		mt: memtable.NewSkipList(),
-		qmt:make([]*memtable.SkipList, 0, 10),
-		flushChan:make(chan *memtable.SkipList, 10),
-		writeChan: make(chan *types.Entity, 10),
+		qmt:make([]*memtable.SkipList, 0, cfg.FlushBufferSize),
+		flushChan:make(chan *memtable.SkipList, cfg.FlushBufferSize),
+		writeChan:make(chan *types.Entity),
+		Config:cfg,
 	}
+
+	controller, err := NewController(db)
+	if err != nil {
+		return nil, err
+	}
+	db.compactController = controller
+	db.compactController.StartCompaction()
+	os.Exit(1)
 	go db.doWrite()
 	go db.flushMemtable()
-	return db
+	return db, nil
 }
 
 func syncDir(dir string) error {
@@ -56,20 +67,23 @@ func (db *Db) flushMemtable() error {
 			// todo Вынести в конфигашду
 			dir, _ := os.Getwd()
 
-			controller := levels.NewController()
-			fid := controller.GetVersionTable().Inc()
+			fid := db.compactController.GetVersionTable().Inc()
 
-			f, err := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, fid), os.O_CREATE|os.O_WRONLY|os.O_SYNC|os.O_EXCL, 0666)
+			f, err := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, fid), os.O_CREATE|os.O_WRONLY|os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
 
 			if err != nil {
 				return errors.Wrap(err, "Failed to create level0 sst")
 			}
 			defer f.Close()
 			it := mt.Getiterator()
-			var buf bytes.Buffer
+			var (
+				buf bytes.Buffer
+				size int
+			)
 			for it.Rewind(); it.Valid(); it.Next() {
-				block := levels.NewBlock(it.Key(), it.Value())
-				buf.Write(levels.MarshalBlock(block))
+				block := compactions.NewBlock(it.Key(), it.Value())
+				size += block.Size()
+				buf.Write(compactions.MarshalBlock(block))
 			}
 
 
@@ -88,7 +102,8 @@ func (db *Db) flushMemtable() error {
 				return err
 			}
 
-			//table := levels.NewTable(f, fid)
+			table := compactions.NewTable(f, fid, size)
+			db.compactController.AddTable(table)
 		}
 	}
 
@@ -111,7 +126,7 @@ func (db *Db) doWrite() {
 		db.writeEntities(entities)
 		<-wait
 	}
-	entities := make([]*types.Entity, 0, 100)
+	entities := make([]*types.Entity, 0, db.Config.WriteBufferSize)
 	var entityElem *types.Entity
 
 	for {
@@ -120,7 +135,7 @@ func (db *Db) doWrite() {
 		for {
 			entities = append(entities, entityElem)
 
-			if len(entities) >= 100 {
+			if len(entities) >= db.Config.WriteBufferSize {
 				wait <- struct{}{}
 				goto WRITE
 			}
@@ -134,7 +149,7 @@ func (db *Db) doWrite() {
 
 		WRITE:
 			go writeFunc(entities)
-			entities = make([]*types.Entity, 0, 100)
+			entities = make([]*types.Entity, 0, db.Config.WriteBufferSize)
 	}
 
 }
@@ -142,8 +157,7 @@ func (db *Db) doWrite() {
 func (db *Db) ensureWriteMemtable() error {
 	db.Lock()
 	defer db.Unlock()
-	fmt.Println(db.mt.Size())
-	if db.mt.Size() < 10 {
+	if db.mt.Size() < db.Config.MemtableSize {
 		return nil
 	}
 	select {
@@ -170,8 +184,12 @@ func (db *Db) Set(key, value []byte) int {
 	from = append(from, f)
 	f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 3), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
 	from = append(from, f)
-	levels.Merge(from, to)
+	compactions.Merge(from, to)
 	os.Exit(1)
+
+
+
+	//todo Проверять на пустой ключ и пустое значение
 	entity := types.NewEntity(key, value)
 	db.writeChan <- entity
 	return len(value)

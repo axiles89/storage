@@ -4,10 +4,26 @@ import (
 	"os"
 	"storage-db"
 	"time"
+	"io/ioutil"
+	"encoding/json"
+	"fmt"
 )
 
 func main() {
-	db := storage_db.NewStorage()
+
+	fmt.Println(os.Getwd())
+	config := storage_db.DefaultConfig
+	_, err := os.Stat("etc/config.json")
+	if err == nil {
+		b, err := ioutil.ReadFile("etc/config.json")
+		if err == nil {
+			json.Unmarshal(b, &config)
+		}
+	} else {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	db, _ := storage_db.NewStorage(&config)
 	db.Set([]byte("n"), []byte("value"))
 	db.Set([]byte("m"), []byte("value"))
 
