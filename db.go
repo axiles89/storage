@@ -86,7 +86,6 @@ func (db *Db) flushMemtable() error {
 				buf.Write(compactions.MarshalBlock(block))
 			}
 
-
 			syncChan := make(chan error)
 			go func(dir string) {
 				syncChan <- syncDir(dir)

@@ -7,26 +7,26 @@ import (
 	"fmt"
 	"time"
 	"storage-db/compactions"
-	"github.com/pkg/errors"
 )
-
-var errNoLevelsForCompaction = errors.New("No levels for compaction")
 
 type Controller struct {
 	db *Db
 	versionTable *types.AtomicInt64
-	sortedRuns *compactions.SortedRuns
+	levels map[int][]*compactions.SortedRun
 	sync.Mutex
 }
 
 func NewController(db *Db) (*Controller, error) {
-	sRuns, err := compactions.NewSortedRuns(db.Config.NumLevels)
-	if err != nil {
-		return nil, err
+	levels := make(map[int][]*compactions.SortedRun)
+	if db.Config.NumLevels == 0 {
+		return nil, fmt.Errorf("NumLevels must be > 0")
+	}
+	for level := 0; level < db.Config.NumLevels; level++ {
+		levels[level] = nil
 	}
 	controller := &Controller{
 		versionTable: types.NewAtomicInt64(5),
-		sortedRuns: sRuns,
+		levels: levels,
 		db: db,
 	}
 
@@ -44,50 +44,118 @@ func NewController(db *Db) (*Controller, error) {
 	return controller, nil
 }
 
-func (c *Controller) getCompactionTable() {
-	//var (
-	//	tables []*compactions.Table
-	//	maxLevel int
-	//)
-	//
-	//tables, maxLevel, err := c.getTableBySpaceAmplification()
+func (c *Controller) countSortedRuns() int {
+	count := 0
+	for level := 0; level < len(c.levels); level++ {
+		sortedRuns, _ := c.levels[level]
+		count += len(sortedRuns)
+
+	}
+	return count
 }
 
-// Получение максимального уровня участвующего в compaction
-func (c *Controller) getTableBySpaceAmplification() (int, error) {
-	// Проверка на space amplification
-	lastActiveLevel, err := c.sortedRuns.LastActiveLevel()
-	if err != nil {
-		return 0, err
+func (c *Controller) getSortedRuns() []*compactions.SortedRun {
+	sortedRuns := make([]*compactions.SortedRun, c.countSortedRuns())
+	for level := 0; level < len(c.levels); level++ {
+		sr, _ := c.levels[level]
+		copy(sortedRuns[:], sr)
 	}
-	lastLevelSize, _ := c.sortedRuns.GetSizeByLevel(lastActiveLevel)
-	levelsSize := 0
+	return sortedRuns
+}
 
-	if (lastActiveLevel == 0) {
-		//tables, _ := c.sortedRuns.GetTables(lastActiveLevel)
-		//for key, table := range tables {
-		//	if
-		//}
+func (c *Controller) getCompactionTable() ([]*compactions.Table, int) {
+	var (
+		tables []*compactions.Table
+		targetLevels int
+	)
+	sortedRuns := c.getSortedRuns()
+	if tables, targetLevels = c.getTableBySpaceAmplification(sortedRuns); tables == nil {
+		if tables, targetLevels = c.getTableBySizeRatio(sortedRuns); tables == nil {
+			tables, targetLevels = c.getByLimitSortedRuns(sortedRuns)
+		}
 	}
-	for level := 0; level < lastActiveLevel; level++ {
-		size, _ := c.sortedRuns.GetSizeByLevel(level)
-		levelsSize += size
+	return tables, targetLevels
+}
+
+func (c *Controller) getByLimitSortedRuns(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int) {
+	var (
+		tables []*compactions.Table
+		targetLevel int
+	)
+	if len(sortedRuns) > c.db.Config.FileNumCompactionTrigger {
+		for i := 0; i <= len(sortedRuns) - c.db.Config.FileNumCompactionTrigger; i++ {
+			targetLevel = sortedRuns[i].Level()
+			for _, table := range sortedRuns[i].Tables() {
+				tables = append(tables, table)
+			}
+		}
+	}
+	return tables, targetLevel
+}
+
+// check size ratio
+func (c *Controller) getTableBySizeRatio(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int) {
+	var (
+		tables []*compactions.Table
+		candidate []*compactions.SortedRun
+		targetLevel int
+	)
+	candidate = append(candidate, sortedRuns[0])
+	candidateSize := sortedRuns[0].Size()
+	sizeRatioTrigger := (100 + c.db.Config.SizeRatio) / 100
+	for _, sortedRun := range sortedRuns[1:] {
+		ratio := float32(sortedRun.Size()) / float32(candidateSize)
+		if ratio <= sizeRatioTrigger {
+			candidate = append(candidate, sortedRun)
+			candidateSize += sortedRun.Size()
+		} else {
+			break
+		}
+	}
+	if len(candidate) > 1 {
+		for _, sortedRun := range candidate {
+			for _, table := range sortedRun.Tables() {
+				tables = append(tables, table)
+			}
+		}
+
+		if len(candidate) == len(sortedRuns) {
+			targetLevel = c.db.Config.NumLevels - 1
+		} else if sortedRuns[len(candidate)].Level() == 0 {
+			targetLevel = 0
+		} else {
+			targetLevel = sortedRuns[len(candidate)].Level() - 1
+		}
 	}
 
-	percent := levelsSize/lastLevelSize * 100
-	// Если превышаем процент space amplification, то мержим все
-	if percent >= c.db.Config.MaxSizeAmplificationPercent {
-		return lastActiveLevel, nil
+	//var tables1 []*compactions.Table
+	return tables, targetLevel
+}
+
+// Check space apmlification
+func (c *Controller) getTableBySpaceAmplification(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int) {
+	var tables []*compactions.Table
+	sizeLastSortedRuns := sortedRuns[0].Size()
+	sizeExcludeLast := 0
+
+	lenSortedRuns := len(sortedRuns)
+	for _, sortedRun := range sortedRuns[1 : lenSortedRuns] {
+		sizeExcludeLast += sortedRun.Size()
 	}
 
-	// Проверка на size соседних sorted runs
-	//candidateSize := 0
-	//sizeRatioTrigger := (100 + c.db.Config.SizeRatio) / 100
-	//for level := 0; level <= lastActiveLevel; level++ {
-	//	tables
-	//}
+	percent := float32(sizeExcludeLast) / float32(sizeLastSortedRuns) * 100
 
-	return 0, errNoLevelsForCompaction
+	if int(percent) >= c.db.Config.MaxSizeAmplificationPercent {
+		for _, sortedRun := range sortedRuns {
+			for _, table := range sortedRun.Tables() {
+				tables = append(tables, table)
+			}
+		}
+	}
+
+	//var tables1 []*compactions.Table
+
+	return tables, c.db.Config.NumLevels - 1
 }
 
 func (c *Controller) StartCompaction() {
@@ -96,25 +164,12 @@ func (c *Controller) StartCompaction() {
 	for {
 		select {
 		case <-ticker.C:
-			if c.sortedRuns.Count() >= c.db.Config.FileNumCompactionTrigger {
-				c.Lock()
-				defer c.Unlock()
-
-				c.sortedRuns.GetSizeByLevel(2)
-				//var tables []*compactions.Table
-				//maxLevel, err := c.getMaxCompactionLevel()
-				//if err != errNoLevelsForCompaction {
-				//	panic(err)
-				//}
-				//for level := 0; level <= maxLevel; level++ {
-				//	levelsTable, _ := c.sortedRuns.GetTables(level)
-				//	for _, table := range levelsTable {
-				//		tables = append(tables, table)
-				//	}
-				//}
-				c.Unlock()
-				os.Exit(1)
+			c.Lock()
+			if c.countSortedRuns() >= c.db.Config.FileNumCompactionTrigger && c.countSortedRuns() > 1 {
+				tables, targetLevels := c.getCompactionTable()
+				fmt.Println(tables, targetLevels)
 			}
+			c.Unlock()
 		}
 	}
 }
@@ -125,11 +180,10 @@ func (c *Controller) GetVersionTable() *types.AtomicInt64 {
 
 func (c *Controller) AddTable(table *compactions.Table) error {
 	c.Lock()
-	err := c.sortedRuns.AddTable(0, table)
-	if err != nil {
-		c.Unlock()
-		return err
-	}
+	var tables []*compactions.Table
+	tables = append(tables, table)
+	sortedRun := compactions.NewSortedRun(0, tables)
+	c.levels[0] = append(c.levels[0], sortedRun)
 	c.Unlock()
 	return nil
 }

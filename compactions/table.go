@@ -108,3 +108,7 @@ func NewTable(f *os.File, id int64, size int) *Table {
 		size:size,
 	}
 }
+
+func (t *Table) Size() int {
+	return t.size
+}
