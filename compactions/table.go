@@ -35,6 +35,14 @@ func NewBlock(key, value []byte) *Block {
 	}
 }
 
+func (b *Block) Key() []byte {
+	return b.key
+}
+
+func (b *Block) Value() []byte {
+	return b.value
+}
+
 func (b *Block) Size() int {
 	return len(b.key) + len(b.value)
 }
@@ -52,8 +60,12 @@ func UnmarshalBlock(r BlockReader) (*Block, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	datablock := make([]byte, fullLenght)
-	r.Read(datablock)
+	err = binary.Read(r, binary.BigEndian, datablock)
+	if err != nil {
+		return nil, errors2.Wrap(ErrReadVariant, "Error read datablock")
+	}
 	keyLen, nKey := binary.Uvarint(datablock)
 	if nKey <= 0 {
 		return nil, errors2.Wrap(ErrReadVariant, "Error read key lenght")
@@ -86,7 +98,7 @@ func MarshalBlock(b *Block) []byte {
 	n = binary.PutUvarint(blocksLenght[:], uint64(lenght))
 	lenghtBlock := blocksLenght[0:n]
 
-	b.buf.WriteByte(23)
+	b.buf.WriteByte(types.NullTerm)
 	b.buf.Write(lenghtBlock)
 	b.buf.Write(lenKeyBlock)
 	b.buf.Write(b.key)
@@ -107,6 +119,10 @@ func NewTable(f *os.File, id int64, size int) *Table {
 		id:id,
 		size:size,
 	}
+}
+
+func (t *Table) F() *os.File {
+	return t.f
 }
 
 func (t *Table) Size() int {

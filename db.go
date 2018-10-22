@@ -4,12 +4,13 @@ import (
 	"storage-db/memtable"
 	"sync"
 	"time"
-	"fmt"
 	"storage-db/types"
 	"storage-db/compactions"
 	"os"
 	"github.com/pkg/errors"
 	"bytes"
+	"storage-db/command"
+	"github.com/sirupsen/logrus"
 )
 
 var errWaitFlush = errors.New("Wait to flush memtable")
@@ -21,15 +22,17 @@ type Db struct {
 	writeChan chan *types.Entity
 	compactController *Controller
 	Config *Config
+	logger *logrus.Logger
 	sync.Mutex
 }
 
-func NewStorage(cfg *Config) (*Db, error) {
+func NewStorage(cfg *Config, logger *logrus.Logger) (*Db, error) {
 	db := &Db{
 		mt: memtable.NewSkipList(),
 		qmt:make([]*memtable.SkipList, 0, cfg.FlushBufferSize),
 		flushChan:make(chan *memtable.SkipList, cfg.FlushBufferSize),
 		writeChan:make(chan *types.Entity),
+		logger: logger,
 		Config:cfg,
 	}
 
@@ -38,10 +41,10 @@ func NewStorage(cfg *Config) (*Db, error) {
 		return nil, err
 	}
 	db.compactController = controller
-	db.compactController.StartCompaction()
-	os.Exit(1)
+	go db.compactController.StartCompaction()
 	go db.doWrite()
 	go db.flushMemtable()
+
 	return db, nil
 }
 
@@ -59,22 +62,19 @@ func syncDir(dir string) error {
 	return nil
 }
 
+// todo кидать паники в случаях падения
 func (db *Db) flushMemtable() error {
 	for {
 		select {
 		case mt := <-db.flushChan:
-
-			// todo Вынести в конфигашду
-			dir, _ := os.Getwd()
-
 			fid := db.compactController.GetVersionTable().Inc()
 
-			f, err := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, fid), os.O_CREATE|os.O_WRONLY|os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
-
+			f, err := command.CreateSSTFile(db.Config.DataFolder, fid)
 			if err != nil {
-				return errors.Wrap(err, "Failed to create level0 sst")
+				db.logger.WithError(err).Error("Failed to create level0 sst")
+				return err
 			}
-			defer f.Close()
+
 			it := mt.Getiterator()
 			var (
 				buf bytes.Buffer
@@ -86,23 +86,20 @@ func (db *Db) flushMemtable() error {
 				buf.Write(compactions.MarshalBlock(block))
 			}
 
-			syncChan := make(chan error)
-			go func(dir string) {
-				syncChan <- syncDir(dir)
-			}(dir)
+			os.Exit(1)
 
 			_, err = f.Write(buf.Bytes())
 			if err != nil {
-				return errors.Wrap(err, "Failed to flush memtable")
-			}
-
-			err = <-syncChan
-			if err != nil {
+				db.logger.WithError(err).Error("Failed to flush memtable")
 				return err
 			}
 
 			table := compactions.NewTable(f, fid, size)
-			db.compactController.AddTable(table)
+			db.compactController.AddTableForLevel0(table)
+
+			db.Lock()
+			db.qmt = db.qmt[1:]
+			db.Unlock()
 		}
 	}
 
@@ -111,9 +108,10 @@ func (db *Db) flushMemtable() error {
 
 func (db *Db) writeEntities(entities []*types.Entity) {
 	for _, entity := range entities {
+		// todo нужен лок?
 		db.mt.Insert(entity.GetKey(), entity.GetValue())
 		for err := db.ensureWriteMemtable(); err == errWaitFlush; err = db.ensureWriteMemtable() {
-			fmt.Println("Flush chan is full")
+			db.logger.Warnln("Flush chan is full")
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
@@ -172,19 +170,19 @@ func (db *Db) ensureWriteMemtable() error {
 
 func (db *Db) Set(key, value []byte) int {
 
-	dir, _ := os.Getwd()
-	to, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 4), os.O_WRONLY|os.O_SYNC|os.O_EXCL, 0666)
-
-	var from []*os.File
-
-	f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 1), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
-	from = append(from, f)
-	f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 2), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
-	from = append(from, f)
-	f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 3), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
-	from = append(from, f)
-	compactions.Merge(from, to)
-	os.Exit(1)
+	//dir, _ := os.Getwd()
+	//to, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 4), os.O_WRONLY|os.O_SYNC|os.O_EXCL, 0666)
+	//
+	//var from []*os.File
+	//
+	//f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 1), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
+	//from = append(from, f)
+	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 2), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
+	//from = append(from, f)
+	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 3), os.O_RDONLY|os.O_SYNC|os.O_EXCL, 0666)
+	//from = append(from, f)
+	//compactions.Merge(from, to)
+	//os.Exit(1)
 
 
 

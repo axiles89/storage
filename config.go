@@ -1,5 +1,7 @@
 package storage_db
 
+import "os"
+
 type Config struct {
 	FlushBufferSize             int     `json:"flushBufferSize"`
 	WriteBufferSize             int     `json:"writeBufferSize"`
@@ -8,11 +10,14 @@ type Config struct {
 	NumLevels                   int     `json:"numLevels"`
 	MaxSizeAmplificationPercent int     `json:"maxSizeAmplificationpercent"`
 	SizeRatio                   float32 `json:"sizeRatio"`
+	DataFolder                  string  `json:"dataFolder"`
+	MaxFileSize                 int     `json:"maxFileSize"`
 }
 
 var DefaultConfig Config
 
 func init() {
+	dir, _ := os.Getwd()
 	DefaultConfig = Config{
 		FlushBufferSize:             10,
 		MemtableSize:                2,
@@ -20,6 +25,8 @@ func init() {
 		MaxSizeAmplificationPercent: 20,
 		NumLevels:                   4,
 		SizeRatio:                   0.1,
+		DataFolder:                  dir,
+		MaxFileSize:                 25,
 	}
-	DefaultConfig.WriteBufferSize = 100
+	DefaultConfig.WriteBufferSize = 30
 }
