@@ -2,27 +2,9 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="d1e865b3-2e72-42bc-b645-298ee76b23b2" name="Default" comment="">
-      <change afterPath="$PROJECT_DIR$/debugfile/4.sst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/debugfile/5.sst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/debugfile/6.sst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/debugfile/7.sst" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/debugfile/8.sst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/1.sst" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/2.sst" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/3.sst" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/cmd/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/cmd/server.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/command/files.go" beforeDir="false" afterPath="$PROJECT_DIR$/command/files.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compactions/merger.go" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/compactions/sorted_run.go" beforeDir="false" afterPath="$PROJECT_DIR$/compactions/sorted_run.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compactions/table.go" beforeDir="false" afterPath="$PROJECT_DIR$/compactions/table.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config.go" beforeDir="false" afterPath="$PROJECT_DIR$/config.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/controller.go" beforeDir="false" afterPath="$PROJECT_DIR$/controller.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/cmd/tester.go" beforeDir="false" afterPath="$PROJECT_DIR$/cmd/tester.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/db.go" beforeDir="false" afterPath="$PROJECT_DIR$/db.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/etc/config.json" beforeDir="false" afterPath="$PROJECT_DIR$/etc/config.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/memtable/skiplist.go" beforeDir="false" afterPath="$PROJECT_DIR$/memtable/skiplist.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/merger.go" beforeDir="false" afterPath="$PROJECT_DIR$/merger.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/types/values.go" beforeDir="false" afterPath="$PROJECT_DIR$/types/values.go" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -52,23 +34,23 @@
       </usages-collector>
       <usages-collector id="statistics.file.extensions.edit">
         <counts>
-          <entry key="go" value="1346" />
+          <entry key="go" value="2083" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.edit">
         <counts>
-          <entry key="Go" value="1346" />
+          <entry key="Go" value="2083" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.extensions.open">
         <counts>
-          <entry key="go" value="3" />
+          <entry key="go" value="5" />
           <entry key="sst" value="1" />
         </counts>
       </usages-collector>
       <usages-collector id="statistics.file.types.open">
         <counts>
-          <entry key="Go" value="3" />
+          <entry key="Go" value="5" />
           <entry key="PLAIN_TEXT" value="1" />
         </counts>
       </usages-collector>
@@ -88,17 +70,17 @@
       <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/cmd/server.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="103">
-              <caret line="20" column="25" lean-forward="true" selection-start-line="20" selection-start-column="25" selection-end-line="20" selection-end-column="25" />
+            <state relative-caret-position="410">
+              <caret line="110" column="4" selection-start-line="110" selection-start-column="4" selection-end-line="111" selection-end-column="40" />
             </state>
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="true">
+      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/memtable/skiplist.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="274">
-              <caret line="174" column="20" selection-start-line="174" selection-start-column="20" selection-end-line="174" selection-end-column="20" />
+            <state relative-caret-position="173">
+              <caret line="311" selection-start-line="311" selection-end-line="311" />
             </state>
           </provider>
         </entry>
@@ -112,11 +94,11 @@
           </provider>
         </entry>
       </file>
-      <file pinned="false" current-in-tab="false">
+      <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/cmd/tester.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="508">
-              <caret line="158" selection-start-line="158" selection-end-line="158" />
+            <state relative-caret-position="245">
+              <caret line="26" column="4" selection-start-line="26" selection-start-column="4" selection-end-line="26" selection-end-column="4" />
               <folding>
                 <element signature="e#14#156#0" expanded="true" />
               </folding>
@@ -125,19 +107,10 @@
         </entry>
       </file>
       <file pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/compactions/table.go">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1815">
-              <caret line="128" column="1" selection-start-line="128" selection-start-column="1" selection-end-line="128" selection-end-column="1" />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/db.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="314">
-              <caret line="181" selection-start-line="181" selection-end-line="181" />
+            <state relative-caret-position="263">
+              <caret line="104" selection-start-line="104" selection-end-line="104" />
             </state>
           </provider>
         </entry>
@@ -241,10 +214,10 @@
         <option value="$PROJECT_DIR$/controller.go" />
         <option value="$PROJECT_DIR$/merger.go" />
         <option value="$PROJECT_DIR$/config.go" />
-        <option value="$PROJECT_DIR$/db.go" />
-        <option value="$PROJECT_DIR$/cmd/tester.go" />
         <option value="$PROJECT_DIR$/cmd/server.go" />
+        <option value="$PROJECT_DIR$/db.go" />
         <option value="$PROJECT_DIR$/memtable/skiplist.go" />
+        <option value="$PROJECT_DIR$/cmd/tester.go" />
       </list>
     </option>
   </component>
@@ -454,16 +427,16 @@
     </history-entry>
   </component>
   <component name="ToolWindowManager">
-    <frame x="0" y="0" width="2560" height="1440" extended-state="0" />
+    <frame x="0" y="0" width="1680" height="1050" extended-state="0" />
     <editor active="true" />
     <layout>
-      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.18665607" />
+      <window_info active="true" content_ui="combo" id="Project" order="0" visible="true" weight="0.2869353" />
       <window_info id="Structure" order="1" side_tool="true" weight="0.25" />
       <window_info id="Favorites" order="2" side_tool="true" />
       <window_info anchor="bottom" id="Message" order="0" />
       <window_info anchor="bottom" id="Find" order="1" weight="0.32878152" />
-      <window_info anchor="bottom" id="Run" order="2" sideWeight="0.4993895" visible="true" weight="0.35486266" />
-      <window_info anchor="bottom" id="Debug" order="3" sideWeight="0.498779" weight="0.4053452" />
+      <window_info anchor="bottom" id="Run" order="2" sideWeight="0.4993895" weight="0.1954023" />
+      <window_info anchor="bottom" id="Debug" order="3" sideWeight="0.498779" visible="true" weight="0.40438873" />
       <window_info anchor="bottom" id="Cvs" order="4" weight="0.25" />
       <window_info anchor="bottom" id="Inspection" order="5" weight="0.4" />
       <window_info anchor="bottom" id="TODO" order="6" />
@@ -540,12 +513,12 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/cmd/tester.go</url>
-          <line>70</line>
+          <line>78</line>
           <option name="timeStamp" value="456" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/cmd/tester.go</url>
-          <line>177</line>
+          <line>185</line>
           <option name="timeStamp" value="457" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
@@ -560,7 +533,7 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/db.go</url>
-          <line>190</line>
+          <line>189</line>
           <option name="timeStamp" value="460" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
@@ -581,31 +554,31 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/db.go</url>
-          <line>181</line>
+          <line>180</line>
           <properties />
           <option name="timeStamp" value="470" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/db.go</url>
-          <line>154</line>
+          <line>153</line>
           <properties />
           <option name="timeStamp" value="471" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/cmd/tester.go</url>
-          <line>100</line>
+          <line>108</line>
           <properties />
           <option name="timeStamp" value="485" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/memtable/skiplist.go</url>
-          <line>209</line>
+          <line>316</line>
           <properties />
           <option name="timeStamp" value="488" />
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/cmd/tester.go</url>
-          <line>158</line>
+          <line>166</line>
           <properties />
           <option name="timeStamp" value="490" />
         </line-breakpoint>
@@ -617,9 +590,27 @@
         </line-breakpoint>
         <line-breakpoint enabled="true" type="DlvLineBreakpoint">
           <url>file://$PROJECT_DIR$/memtable/skiplist.go</url>
-          <line>249</line>
+          <line>350</line>
           <properties />
           <option name="timeStamp" value="497" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/memtable/skiplist.go</url>
+          <line>183</line>
+          <properties />
+          <option name="timeStamp" value="498" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/memtable/skiplist.go</url>
+          <line>237</line>
+          <properties />
+          <option name="timeStamp" value="499" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/memtable/skiplist.go</url>
+          <line>311</line>
+          <properties />
+          <option name="timeStamp" value="503" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
@@ -821,13 +812,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/cmd/server.go">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="103">
-          <caret line="20" column="25" lean-forward="true" selection-start-line="20" selection-start-column="25" selection-end-line="20" selection-end-column="25" />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/controller.go">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="56">
@@ -835,27 +819,37 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/memtable/skiplist_test.go">
+      <provider selected="true" editor-type-id="text-editor" />
+    </entry>
+    <entry file="file://$PROJECT_DIR$/memtable/skiplist.go">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="173">
+          <caret line="311" selection-start-line="311" selection-end-line="311" />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/db.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="314">
-          <caret line="181" selection-start-line="181" selection-end-line="181" />
+        <state relative-caret-position="263">
+          <caret line="104" selection-start-line="104" selection-end-line="104" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/cmd/server.go">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="410">
+          <caret line="110" column="4" selection-start-line="110" selection-start-column="4" selection-end-line="111" selection-end-column="40" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/cmd/tester.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="508">
-          <caret line="158" selection-start-line="158" selection-end-line="158" />
+        <state relative-caret-position="245">
+          <caret line="26" column="4" selection-start-line="26" selection-start-column="4" selection-end-line="26" selection-end-column="4" />
           <folding>
             <element signature="e#14#156#0" expanded="true" />
           </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/memtable/skiplist.go">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="274">
-          <caret line="174" column="20" selection-start-line="174" selection-start-column="20" selection-end-line="174" selection-end-column="20" />
         </state>
       </provider>
     </entry>

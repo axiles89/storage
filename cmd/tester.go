@@ -23,6 +23,16 @@ var errors = make(chan error)
 
 func main() {
 
+	//db.Set([]byte("k"), []byte("value"))
+	//db.Set([]byte("l"), []byte("value"))
+	//db.Set([]byte("m"), []byte("value"))
+	//db.Set([]byte("n"), []byte("value2"))
+	//db.Set([]byte("o"), []byte("value2"))
+	//db.Set([]byte("m"), []byte("2"))
+	//select {
+	//
+	//}
+	//os.Exit(1)
 
 	fmt.Println("Start tester")
 

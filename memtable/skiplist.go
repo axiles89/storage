@@ -172,6 +172,72 @@ func (sl *SkipList) Search(key []byte) []byte {
 	return nil
 }
 
+func (sl *SkipList) findNodeForUpdateV2(key []byte) *[maxLevel]struct{
+	typeNode string
+	offset int
+} {
+	update := [maxLevel]struct{
+		typeNode string
+		offset int
+	}{}
+
+	currentOffset := 0
+	currentNode := sl.head
+	var typeNode string
+	for level:= sl.level - 1; level >= 0; level-- {
+		for {
+			offset := currentNode.forward[level]
+			if offset == 0 {
+				if currentOffset == 0 {
+					typeNode = "head"
+				} else {
+					typeNode = "list"
+				}
+
+				update[level] = struct {
+					typeNode string
+					offset   int
+				}{typeNode: typeNode, offset: currentOffset}
+				break
+			}
+			nextNode := sl.nodesRepository.GetByNumber(offset)
+			// key < nn.k
+			if bytes.Compare(key,nextNode.key) == -1 {
+				if currentOffset == 0 {
+					typeNode = "head"
+				} else {
+					typeNode = "list"
+				}
+
+				update[level] = struct {
+					typeNode string
+					offset   int
+				}{typeNode: typeNode, offset: currentOffset}
+				break
+			}
+			// key == nn.k (обновляем элемент)
+			if bytes.Compare(key, nextNode.key) == 0 {
+				update[level] = struct {
+					typeNode string
+					offset   int
+				}{typeNode: "list", offset: offset}
+				break
+			}
+			currentNode = nextNode
+			currentOffset = offset
+			// key > nn.k и nn последний элемент уровня и начинаем следующий уровень с этого элемента
+			if nextNode.forward[level] == 0 {
+				update[level] = struct {
+					typeNode string
+					offset   int
+				}{typeNode: "list", offset: currentOffset}
+				break
+			}
+		}
+	}
+	return &update
+}
+
 func (sl *SkipList) findNodeForUpdate(key []byte) *updateLink {
 	update := updateLink{}
 
@@ -205,10 +271,55 @@ func (sl *SkipList) findNodeForUpdate(key []byte) *updateLink {
 	return &update
 }
 
+func (sl *SkipList) InsertV2(key []byte, value []byte) int {
+	update := sl.findNodeForUpdateV2(key)
+
+	// Ищем сперва по первому уровню, если находим, то просто обновляем ключ и значение без перестраивания ссылок
+	var newNodeLink *node
+	if update[0].typeNode != "head" {
+		newNodeLink = sl.nodesRepository.GetByNumber(update[0].offset)
+	}
+	if newNodeLink != nil && bytes.Equal(key, newNodeLink.key) {
+		newNodeLink.value = value
+	} else {
+		newNode := newNode(key, value)
+		levelNode := sl.randomLevel()
+		if string(newNode.key) == "l" {
+			levelNode = 2
+		}
+
+		//todo Разобраться действительно ли выигрываем по gc при добавлении не по ссылке
+		offset, newNodeLink := sl.nodesRepository.Add(*newNode)
+		if levelNode > sl.level {
+			for level := sl.level + 1; level <= levelNode; level++ {
+				update[level - 1] = struct {
+					typeNode string
+					offset   int
+				}{typeNode: "head", offset: 0}
+			}
+			sl.level = levelNode
+		}
+
+		for level, updateNodes := range update[0:levelNode] {
+			var editNode *node
+			if updateNodes.typeNode == "head" {
+				editNode = sl.head
+			} else {
+				editNode = sl.nodesRepository.GetByNumber(updateNodes.offset)
+			}
+			(*newNodeLink).forward[level] = (*editNode).forward[level]
+			(*editNode).forward[level] = offset
+		}
+	}
+
+	return len(value)
+}
+
 func (sl *SkipList) Insert(key []byte, value []byte) int {
 	if len(sl.nodesRepository.nodes) == 4 || len(sl.nodesRepository.nodes) == 5 {
 		fmt.Println("skiplist 4 or 5")
 	}
+
 	update := sl.findNodeForUpdate(key)
 
 	// Ищем сперва по первому уровню, если находим, то просто обновляем ключ и значение без перестраивания ссылок
@@ -217,15 +328,8 @@ func (sl *SkipList) Insert(key []byte, value []byte) int {
 		newNodeLink.value = value
 	} else {
 		newNode := newNode(key, value)
+		levelNode := sl.randomLevel()
 
-		var levelNode int
-		if len(sl.nodesRepository.nodes) == 40 || len(sl.nodesRepository.nodes) == 41 {
-			levelNode = 3
-
-		} else {
-			levelNode = sl.randomLevel()
-
-		}
 		//if string(key) == "a" {
 		//	levelNode = 4
 		//} else if string(key) == "b" {

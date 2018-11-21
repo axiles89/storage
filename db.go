@@ -100,7 +100,7 @@ func (db *Db) writeEntities(entities []*types.Entity) {
 	for _, entity := range entities {
 		// todo нужен лок?
 		db.Lock()
-		db.mt.Insert(entity.GetKey(), entity.GetValue())
+		db.mt.InsertV2(entity.GetKey(), entity.GetValue())
 		db.Unlock()
 		for err := db.ensureWriteMemtable(); err == errWaitFlush; err = db.ensureWriteMemtable() {
 			db.logger.Warnln("Flush chan is full")
@@ -125,7 +125,6 @@ func (db *Db) doWrite() {
 			entities = append(entities, entityElem)
 
 			if len(entities) >= db.Config.WriteBufferSize {
-				fmt.Println("wait")
 				wait <- struct{}{}
 				goto WRITE
 			}
