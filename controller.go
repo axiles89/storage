@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 	"storage-db/compactions"
-	"github.com/pkg/errors"
-	"os"
+	"storage-db/command"
+	"github.com/sirupsen/logrus"
 )
 
 type Controller struct {
@@ -15,6 +15,7 @@ type Controller struct {
 	versionTable *types.AtomicInt64
 	levels map[int][]*compactions.SortedRun
 	merger *Merger
+	garbageSortedRuns *compactions.GarbageSortedRuns
 	sync.RWMutex
 }
 
@@ -27,31 +28,41 @@ func NewController(db *Db) (*Controller, error) {
 		levels[level] = nil
 	}
 	controller := &Controller{
-		versionTable: types.NewAtomicInt64(5),
+		versionTable: types.NewAtomicInt64(0),
 		levels: levels,
 		db: db,
+		garbageSortedRuns: compactions.NewGarbageSortedRuns(),
 	}
 
 	merger := NewMerger(controller)
 	controller.merger = merger
 
-	tables := make([]*compactions.Table, 0)
-	f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 1), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	table := compactions.NewTable(f, 1, 13)
-	tables = append(tables, table)
-	controller.AddTableForLevel0(table)
+	//for i := 1; i <= 13; i++ {
+	//	tables := make([]*compactions.Table, 0)
+	//	f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db/sst", i), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//	table := compactions.NewTable(f, int64(i), 130)
+	//	tables = append(tables, table)
+	//	controller.AddTablesForLevel(tables, 0)
+	//}
 
-	tables = make([]*compactions.Table, 0)
-	f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 2), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	table = compactions.NewTable(f, 2, 10)
-	tables = append(tables, table)
-	controller.AddTableForLevel0(table)
+	//tables := make([]*compactions.Table, 0)
+	//f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 6), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table := compactions.NewTable(f, 6, 13)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
+	//
+	//tables = make([]*compactions.Table, 0)
+	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 7), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table = compactions.NewTable(f, 7, 10)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
+	//
+	//tables = make([]*compactions.Table, 0)
+	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 8), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table = compactions.NewTable(f, 8, 10)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
 
-	tables = make([]*compactions.Table, 0)
-	f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 3), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	table = compactions.NewTable(f, 3, 10)
-	tables = append(tables, table)
-	controller.AddTablesForLevel(tables, 3)
 	return controller, nil
 }
 
@@ -65,45 +76,44 @@ func (c *Controller) countSortedRuns() int {
 	return count
 }
 
-func (c *Controller) countSortedRunsByLevel(level int) (int, error) {
-	sortedRuns, ok := c.levels[level]
-	if !ok {
-		return 0, errors.New("sortedRuns by level not found")
-	}
-	count := len(sortedRuns)
-	return count, nil
-}
-
-func (c *Controller) getSortedRuns() []*compactions.SortedRun {
+func (c *Controller) getSortedRuns(needInc bool) []*compactions.SortedRun {
 	sortedRuns := make([]*compactions.SortedRun, c.countSortedRuns())
 	offset := 0
 	for level := 0; level < len(c.levels); level++ {
 		sr, _ := c.levels[level]
+		if needInc {
+			for _, sr := range sr {
+				sr.IncCounterLink()
+			}
+		}
 		copy(sortedRuns[offset:], sr)
 		offset += len(sr)
 	}
 	return sortedRuns
 }
 
-func (c *Controller) getCompactionTable() ([]*compactions.Table, int) {
+func (c *Controller) getCompactionTable() ([]*compactions.Table, int, int) {
 	var (
 		tables []*compactions.Table
 		targetLevels int
+		needMergeSr int
 	)
-	sortedRuns := c.getSortedRuns()
+	sortedRuns := c.getSortedRuns(false)
 
-	if tables, targetLevels = c.getTableBySpaceAmplification(sortedRuns); tables == nil {
-		if tables, targetLevels = c.getTableBySizeRatio(sortedRuns); tables == nil {
-			tables, targetLevels = c.getByLimitSortedRuns(sortedRuns)
+	if tables, targetLevels, needMergeSr = c.getTableBySpaceAmplification(sortedRuns); tables == nil {
+		if tables, targetLevels, needMergeSr = c.getTableBySizeRatio(sortedRuns); tables == nil {
+			tables, targetLevels, needMergeSr = c.getByLimitSortedRuns(sortedRuns)
 		}
 	}
-	return tables, targetLevels
+
+	return tables, targetLevels, needMergeSr
 }
 
-func (c *Controller) getByLimitSortedRuns(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int) {
+func (c *Controller) getByLimitSortedRuns(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int, int) {
 	var (
 		tables []*compactions.Table
 		targetLevel int
+		needMergeSr int
 	)
 	if len(sortedRuns) > c.db.Config.FileNumCompactionTrigger {
 		for i := 0; i <= len(sortedRuns) - c.db.Config.FileNumCompactionTrigger; i++ {
@@ -111,13 +121,14 @@ func (c *Controller) getByLimitSortedRuns(sortedRuns []*compactions.SortedRun) (
 			for _, table := range sortedRuns[i].Tables() {
 				tables = append(tables, table)
 			}
+			needMergeSr++
 		}
 	}
-	return tables, targetLevel
+	return tables, targetLevel, needMergeSr
 }
 
 // check size ratio
-func (c *Controller) getTableBySizeRatio(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int) {
+func (c *Controller) getTableBySizeRatio(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int, int) {
 	var (
 		tables []*compactions.Table
 		candidate []*compactions.SortedRun
@@ -152,17 +163,17 @@ func (c *Controller) getTableBySizeRatio(sortedRuns []*compactions.SortedRun) ([
 	}
 
 	//var tables1 []*compactions.Table
-	return tables, targetLevel
+	return tables, targetLevel, len(candidate)
 }
 
 // Check space apmlification
-func (c *Controller) getTableBySpaceAmplification(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int) {
+func (c *Controller) getTableBySpaceAmplification(sortedRuns []*compactions.SortedRun) ([]*compactions.Table, int, int) {
 	var tables []*compactions.Table
-	sizeLastSortedRuns := sortedRuns[0].Size()
+	lenSortedRuns := len(sortedRuns)
+	sizeLastSortedRuns := sortedRuns[lenSortedRuns - 1].Size()
 	sizeExcludeLast := 0
 
-	lenSortedRuns := len(sortedRuns)
-	for _, sortedRun := range sortedRuns[1 : lenSortedRuns] {
+	for _, sortedRun := range sortedRuns[0 : lenSortedRuns - 1] {
 		sizeExcludeLast += sortedRun.Size()
 	}
 
@@ -178,7 +189,7 @@ func (c *Controller) getTableBySpaceAmplification(sortedRuns []*compactions.Sort
 
 	//var tables1 []*compactions.Table
 
-	return tables, c.db.Config.NumLevels - 1
+	return tables, c.db.Config.NumLevels - 1, len(sortedRuns)
 }
 
 func (c *Controller) StartCompaction() error {
@@ -189,12 +200,15 @@ func (c *Controller) StartCompaction() error {
 		case <-ticker.C:
 			c.RLock()
 			if c.countSortedRuns() >= c.db.Config.FileNumCompactionTrigger && c.countSortedRuns() > 1 {
-				tables, targetLevel := c.getCompactionTable()
-				countBeforeMerge, err := c.countSortedRunsByLevel(targetLevel)
-				if err != nil {
-					return err
-				}
+				tables, targetLevel, needMergeSr := c.getCompactionTable()
+
+				// Запоминаем время когда стартовало слияние, чтобы потом записать результаты не затерев новые скинутые sortedRun
+				startTime := time.Now()
 				c.RUnlock()
+
+				if tables == nil {
+					continue
+				}
 
 				newTables, err := c.merger.Merge(tables)
 				if err != nil {
@@ -202,18 +216,64 @@ func (c *Controller) StartCompaction() error {
 				}
 
 				c.Lock()
-				countAfterMerge, err := c.countSortedRunsByLevel(targetLevel)
-				if err != nil {
-					return err
-				}
-				if countAfterMerge != countBeforeMerge && targetLevel == 0 {
+				mergeSr := 0
+				// todo Потенциально опасное место - покрыть тестами
+				for level := 0; level <= targetLevel; level++ {
+					if sortedRunsByLevel, ok := c.levels[level]; ok {
+						var newSortedRuns []*compactions.SortedRun
+						for _, sortedRun := range sortedRunsByLevel {
+							if !sortedRun.OlderThan(startTime) || mergeSr == needMergeSr {
+								// Сохраняем sortedRun, которые появились после начала слияния или которые остались на уровне, но не сливались
+								newSortedRuns = append(newSortedRuns, sortedRun)
+							} else {
+								mergeSr++
+								c.garbageSortedRuns.Add(sortedRun)
+								if level == targetLevel && mergeSr == needMergeSr {
+									newSortedRun := compactions.NewSortedRun(targetLevel, newTables, startTime)
+									newSortedRuns = append(newSortedRuns, newSortedRun)
+								}
+							}
+						}
 
+						if level == targetLevel && newSortedRuns == nil {
+							newSortedRun := compactions.NewSortedRun(targetLevel, newTables, startTime)
+							// todo добавить проставление уровня, необходимо для последующего слияния (проверки выходного уровня)
+							newSortedRuns = append(newSortedRuns, newSortedRun)
+						}
+
+						c.levels[level] = newSortedRuns
+					}
 				}
-				fmt.Println(tables, targetLevel, newTables)
 				c.Unlock()
-				os.Exit(1)
 			} else {
 				c.RUnlock()
+			}
+		}
+	}
+}
+
+func (c *Controller) ClearGarbageSortedRuns() error {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.Lock()
+			sortedRuns := c.garbageSortedRuns.NeedToDelete()
+			c.Unlock()
+			if sortedRuns != nil {
+				for _, sortedRun := range sortedRuns {
+					for _, table := range sortedRun.Tables() {
+						if err := command.DeleteSSTFile(c.db.Config.DataFolder, table.Id()); err != nil {
+							c.db.logger.WithError(err).Errorf("Error for delete %d.sst", table.Id())
+						} else {
+							c.db.logger.WithFields(logrus.Fields{
+								"id": table.Id(),
+							}).Info("Garbage collector for table")
+						}
+					}
+				}
+				command.SyncDir(c.db.Config.DataFolder)
 			}
 		}
 	}
@@ -223,6 +283,7 @@ func (c *Controller) GetVersionTable() *types.AtomicInt64 {
 	return c.versionTable
 }
 
+// todo Оставил для более быстрого дебага
 func (c *Controller) AddTablesForLevel(tables []*compactions.Table, level int) error {
 	if level > c.db.Config.NumLevels - 1 {
 		return fmt.Errorf("Level > NumLevels")
@@ -234,7 +295,7 @@ func (c *Controller) AddTablesForLevel(tables []*compactions.Table, level int) e
 	} else {
 		c.Lock()
 		var sortedRuns []*compactions.SortedRun
-		sortedRun := compactions.NewSortedRun(level, tables)
+		sortedRun := compactions.NewSortedRun(level, tables, time.Now())
 		c.levels[level] = append(sortedRuns, sortedRun)
 		c.Unlock()
 	}
@@ -245,7 +306,8 @@ func (c *Controller) AddTableForLevel0(table *compactions.Table) error {
 	c.Lock()
 	var tables []*compactions.Table
 	tables = append(tables, table)
-	sortedRun := compactions.NewSortedRun(0, tables)
+	sortedRun := compactions.NewSortedRun(0, tables, time.Now())
+
 	sortedRuns := make([]*compactions.SortedRun, len(c.levels[0]) + 1)
 	sortedRuns[0] = sortedRun
 	copy(sortedRuns[1:], c.levels[0])

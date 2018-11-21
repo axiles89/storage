@@ -6,11 +6,12 @@ import (
 	"time"
 	"storage-db/types"
 	"storage-db/compactions"
-	"os"
 	"github.com/pkg/errors"
 	"bytes"
 	"storage-db/command"
 	"github.com/sirupsen/logrus"
+	"os"
+	"fmt"
 )
 
 var errWaitFlush = errors.New("Wait to flush memtable")
@@ -23,7 +24,7 @@ type Db struct {
 	compactController *Controller
 	Config *Config
 	logger *logrus.Logger
-	sync.Mutex
+	sync.RWMutex
 }
 
 func NewStorage(cfg *Config, logger *logrus.Logger) (*Db, error) {
@@ -42,34 +43,23 @@ func NewStorage(cfg *Config, logger *logrus.Logger) (*Db, error) {
 	}
 	db.compactController = controller
 	go db.compactController.StartCompaction()
+	go db.compactController.ClearGarbageSortedRuns()
 	go db.doWrite()
 	go db.flushMemtable()
 
 	return db, nil
 }
 
-func syncDir(dir string) error {
-	d, err := os.Open(dir)
-	if err != nil {
-		return errors.Wrapf(err,"Failed to open %s for sync ", dir)
-	}
-	if err = d.Sync(); err != nil {
-		return errors.Wrapf(err,"Failed to sync %s", dir)
-	}
-	if err = d.Close(); err != nil {
-		return errors.Wrapf(err,"Failed to close %s", dir)
-	}
-	return nil
-}
-
-// todo кидать паники в случаях падения
+// todo Начать учитывать максимальный размер файла
 func (db *Db) flushMemtable() error {
 	for {
 		select {
 		case mt := <-db.flushChan:
+			fmt.Print("flush")
+			continue
 			fid := db.compactController.GetVersionTable().Inc()
 
-			f, err := command.CreateSSTFile(db.Config.DataFolder, fid)
+			f, err := command.OpenSSTFile(db.Config.DataFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
 			if err != nil {
 				db.logger.WithError(err).Error("Failed to create level0 sst")
 				return err
@@ -81,25 +71,25 @@ func (db *Db) flushMemtable() error {
 				size int
 			)
 			for it.Rewind(); it.Valid(); it.Next() {
+				fmt.Println(it.Key())
 				block := compactions.NewBlock(it.Key(), it.Value())
 				size += block.Size()
 				buf.Write(compactions.MarshalBlock(block))
 			}
-
-			os.Exit(1)
-
 			_, err = f.Write(buf.Bytes())
 			if err != nil {
+				f.Close()
 				db.logger.WithError(err).Error("Failed to flush memtable")
 				return err
 			}
 
-			table := compactions.NewTable(f, fid, size)
+			table := compactions.NewTable(db.Config.DataFolder, fid, size)
 			db.compactController.AddTableForLevel0(table)
 
 			db.Lock()
 			db.qmt = db.qmt[1:]
 			db.Unlock()
+			f.Close()
 		}
 	}
 
@@ -109,7 +99,9 @@ func (db *Db) flushMemtable() error {
 func (db *Db) writeEntities(entities []*types.Entity) {
 	for _, entity := range entities {
 		// todo нужен лок?
+		db.Lock()
 		db.mt.Insert(entity.GetKey(), entity.GetValue())
+		db.Unlock()
 		for err := db.ensureWriteMemtable(); err == errWaitFlush; err = db.ensureWriteMemtable() {
 			db.logger.Warnln("Flush chan is full")
 			time.Sleep(100 * time.Millisecond)
@@ -133,6 +125,7 @@ func (db *Db) doWrite() {
 			entities = append(entities, entityElem)
 
 			if len(entities) >= db.Config.WriteBufferSize {
+				fmt.Println("wait")
 				wait <- struct{}{}
 				goto WRITE
 			}
@@ -166,6 +159,45 @@ func (db *Db) ensureWriteMemtable() error {
 
 	}
 	return nil
+}
+
+func (db *Db) Get(key []byte) ([]byte, error) {
+	db.RLock()
+	result := db.mt.Search(key)
+	if result != nil {
+		db.RUnlock()
+		return result, nil
+	}
+	qmt := db.qmt
+	db.RUnlock()
+
+	for i := len(qmt) - 1; i >= 0; i-- {
+		result = qmt[i].Search(key)
+		if result != nil {
+			return result, nil
+		}
+	}
+
+	db.compactController.RLock()
+	sortedRuns := db.compactController.getSortedRuns(true)
+	defer func(sortedRuns []*compactions.SortedRun) {
+		for _, sortedRun := range sortedRuns {
+			sortedRun.DecCounterLink()
+		}
+	}(sortedRuns)
+	db.compactController.RUnlock()
+
+	for _, sortedRun := range sortedRuns {
+		result, err := sortedRun.Search(key)
+		if err != nil {
+			return nil, err
+		}
+		if result != nil {
+			return result, nil
+		}
+	}
+
+	return nil, nil
 }
 
 func (db *Db) Set(key, value []byte) int {

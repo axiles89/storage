@@ -1,15 +1,41 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"storage-db"
 	"time"
-	"io/ioutil"
-	"encoding/json"
-	"fmt"
 )
 
+type node struct {
+	n int
+}
+type test struct {
+	arr []node
+}
 func main() {
+
+	arr := test{[]node{{1}, {2}, {3}}}
+	arr0 := &(arr.arr[1])
+	(*arr0).n = 33
+	fmt.Println(arr0)
+	for _, v := range arr.arr {
+		fmt.Println(v)
+	}
+	os.Exit(1)
+	//arr := []test{{1},{2},{3}}
+	//fmt.Println(arr)
+	//
+	//addr := &(arr[1])
+	//arr.num = 3
+	//fmt.Printf("%p \n", &arr)
+	//
+	//fmt.Printf("%p \n", &(arr[0]))
+	//fmt.Printf("%p \n", &(arr[1]))
+	//fmt.Printf("%p \n", &(arr[2]))
+	//os.Exit(1)
 
 	//result := 0
 	//tc := make(chan int)
@@ -81,11 +107,15 @@ func main() {
 	}
 
 	db, _ := storage_db.NewStorage(&config, storage_db.GetLogger())
-	time.Sleep(50 * time.Second)
-	os.Exit(0)
 
 	db.Set([]byte("n"), []byte("value"))
-	db.Set([]byte("m"), []byte("value"))
+	db.Set([]byte("k"), []byte("value"))
+
+	time.Sleep(2 * time.Second)
+	result, err := db.Get([]byte("m1"))
+	fmt.Println(string(result), err)
+	time.Sleep(50 * time.Second)
+	os.Exit(1)
 
 	time.Sleep(50 * time.Second)
 	os.Exit(0)

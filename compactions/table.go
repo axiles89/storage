@@ -3,7 +3,6 @@ package compactions
 import (
 	"encoding/binary"
 	"bytes"
-	"os"
 	"io"
 	"storage-db/types"
 	"errors"
@@ -108,21 +107,25 @@ func MarshalBlock(b *Block) []byte {
 }
 
 type Table struct {
-	f *os.File
+	dir string
 	id int64
 	size int
 }
 
-func NewTable(f *os.File, id int64, size int) *Table {
+func NewTable(dir string, id int64, size int) *Table {
 	return &Table{
-		f:f,
+		dir:dir,
 		id:id,
 		size:size,
 	}
 }
 
-func (t *Table) F() *os.File {
-	return t.f
+func (t *Table) Dir() string {
+	return t.dir
+}
+
+func (t *Table) Id() int64 {
+	return t.id
 }
 
 func (t *Table) Size() int {

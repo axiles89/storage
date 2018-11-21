@@ -6,18 +6,19 @@ import (
 	"github.com/pkg/errors"
 )
 
-func CreateSSTFile(dir string, fid int64) (*os.File, error) {
-	f, err := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, fid), os.O_CREATE|os.O_RDWR|os.O_SYNC|os.O_EXCL, 0666)
+func OpenSSTFile(dir string, fid int64, flags int) (*os.File, error) {
+	// O_EXCL
+	f, err := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, fid), flags, 0666)
 	if err != nil {
 		return nil, err
 	}
-	if err := syncDir(dir); err != nil {
+	if err := SyncDir(dir); err != nil {
 		return nil, err
 	}
 	return f, nil
 }
 
-func syncDir(dir string) error {
+func SyncDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return errors.Wrapf(err,"Failed to open %s for sync ", dir)
@@ -28,5 +29,13 @@ func syncDir(dir string) error {
 	if err = d.Close(); err != nil {
 		return errors.Wrapf(err,"Failed to close %s", dir)
 	}
+	return nil
+}
+
+func DeleteSSTFile(dir string, fid int64) error {
+	if err := os.Remove(fmt.Sprintf("%s/%d.sst", dir, fid)); err != nil {
+		return err
+	}
+	SyncDir(dir)
 	return nil
 }

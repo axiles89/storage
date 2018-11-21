@@ -1,6 +1,7 @@
 package memtable
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 	"bytes"
@@ -74,8 +75,13 @@ type nodesRepository struct {
 func newNodesRepository() *nodesRepository {
 	return &nodesRepository{
 		size: 0,
-		nodes: make([]node, 0, 40),
+		nodes: make([]node, 0, 1),
 	}
+}
+
+//todo удалить
+func (r *nodesRepository) Len() (int) {
+	return len(r.nodes)
 }
 
 func (r *nodesRepository) GetByNumber(number int) *node {
@@ -111,6 +117,11 @@ func NewSkipList() *SkipList {
 	}
 }
 
+//todo удалить
+func (sl *SkipList) GetNodes() *nodesRepository {
+	return sl.nodesRepository
+}
+
 func (sl *SkipList) Getiterator() *Iterator {
 	return &Iterator{
 		skipList: sl,
@@ -137,6 +148,9 @@ func (sl *SkipList) Search(key []byte) []byte {
 	for level:= sl.level - 1; level >= 0; level-- {
 		for {
 			offset := currentNode.forward[level]
+			if offset == 4 {
+				fmt.Println("offset 4")
+			}
 			if offset == 0 {
 				break
 			}
@@ -192,6 +206,9 @@ func (sl *SkipList) findNodeForUpdate(key []byte) *updateLink {
 }
 
 func (sl *SkipList) Insert(key []byte, value []byte) int {
+	if len(sl.nodesRepository.nodes) == 4 || len(sl.nodesRepository.nodes) == 5 {
+		fmt.Println("skiplist 4 or 5")
+	}
 	update := sl.findNodeForUpdate(key)
 
 	// Ищем сперва по первому уровню, если находим, то просто обновляем ключ и значение без перестраивания ссылок
@@ -201,7 +218,14 @@ func (sl *SkipList) Insert(key []byte, value []byte) int {
 	} else {
 		newNode := newNode(key, value)
 
-		levelNode := sl.randomLevel()
+		var levelNode int
+		if len(sl.nodesRepository.nodes) == 40 || len(sl.nodesRepository.nodes) == 41 {
+			levelNode = 3
+
+		} else {
+			levelNode = sl.randomLevel()
+
+		}
 		//if string(key) == "a" {
 		//	levelNode = 4
 		//} else if string(key) == "b" {
@@ -211,6 +235,7 @@ func (sl *SkipList) Insert(key []byte, value []byte) int {
 		//}
 		//todo Разобраться действительно ли выигрываем по gc при добавлении не по ссылке
 		offset, newNodeLink := sl.nodesRepository.Add(*newNode)
+		fmt.Printf("new mode link %p \n", newNodeLink)
 		if levelNode > sl.level {
 			for level := sl.level + 1; level <= levelNode; level++ {
 				update.set(level - 1, sl.head)
@@ -219,10 +244,18 @@ func (sl *SkipList) Insert(key []byte, value []byte) int {
 		}
 
 		for level, updateNodes := range update[0:levelNode] {
-			newNodeLink.forward[level] = updateNodes.before.forward[level]
-			updateNodes.before.forward[level] = offset
+			editNode := updateNodes.before
+			if len(sl.nodesRepository.nodes) == 5  {
+				fmt.Printf("edit link %p \n", editNode)
+				fmt.Println("test")
+			}
+
+			(*newNodeLink).forward[level] = updateNodes.before.forward[level]
+			(*editNode).forward[level] = offset
 		}
 	}
+
+	//fmt.Println("skiplist len = ", len(sl.nodesRepository.nodes))
 
 	return len(value)
 }

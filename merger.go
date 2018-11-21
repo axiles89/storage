@@ -6,11 +6,9 @@ import (
 	"os"
 	"bufio"
 	"sync"
-	"fmt"
 	"storage-db/compactions"
 	"storage-db/command"
 	"context"
-	errors2 "errors"
 )
 
 const write_batch_lenght = 2
@@ -73,14 +71,6 @@ func NewMergeBlocks(readers []compactions.BlockReader) *mergeBlocks {
 	return nextBlocks
 }
 
-func getFiles(tables []*compactions.Table) []*os.File {
-	var files []*os.File
-	for _, table := range tables {
-		files = append(files, table.F())
-	}
-	return files
-}
-
 type (
 	chanResult chan *compactions.Table
 	chanError chan error
@@ -98,7 +88,7 @@ func NewMerger(controller *Controller) *Merger {
 	}
 }
 
-func (m *Merger) getMergeResult(ctx context.Context, tables []*compactions.Table) (chanResult, chanError) {
+func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResult, chanError) {
 	result := make(chanResult)
 	errors := make(chanError)
 	m.Add(1)
@@ -108,8 +98,7 @@ func (m *Merger) getMergeResult(ctx context.Context, tables []*compactions.Table
 			m.Done()
 		}()
 
-		from := getFiles(tables)
-		readers := getReaders(from)
+		readers := getReaders(files)
 		var	(
 			saveMin bool
 			f *os.File
@@ -153,14 +142,14 @@ func (m *Merger) getMergeResult(ctx context.Context, tables []*compactions.Table
 
 								if f == nil || (currentSize + len(b) > m.controller.db.Config.MaxFileSize) {
 									if currentSize + len(b) > m.controller.db.Config.MaxFileSize {
-										table := compactions.NewTable(f, fid, currentSize)
+										f.Close()
+										table := compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize)
 										result <- table
 										currentSize = 0
 									}
 
 									fid = m.controller.GetVersionTable().Inc()
-									f, err = command.CreateSSTFile(m.controller.db.Config.DataFolder, fid)
-									err = errors2.New("dddd")
+									f, err = command.OpenSSTFile(m.controller.db.Config.DataFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
 									if err != nil {
 										m.controller.db.logger.WithError(err).Error("Error with create new sst file")
 										errors <- err
@@ -186,16 +175,19 @@ func (m *Merger) getMergeResult(ctx context.Context, tables []*compactions.Table
 			}
 		}
 
-		m.Wait()
+		wg.Wait()
 
 		if m.writeBuffer.Len() > 0 {
-			if currentSize + len(m.writeBuffer.Bytes()) > m.controller.db.Config.MaxFileSize {
-				table := compactions.NewTable(f, fid, currentSize)
-				result <- table
-				currentSize = 0
+			if f == nil || currentSize + m.writeBuffer.Len() > m.controller.db.Config.MaxFileSize {
+				if currentSize + m.writeBuffer.Len() > m.controller.db.Config.MaxFileSize {
+					f.Close()
+					table := compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize)
+					result <- table
+					currentSize = 0
+				}
 
 				fid = m.controller.GetVersionTable().Inc()
-				f, err = command.CreateSSTFile(m.controller.db.Config.DataFolder, fid)
+				f, err = command.OpenSSTFile(m.controller.db.Config.DataFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
 				if err != nil {
 					m.controller.db.logger.WithError(err).Error("Error with create new sst file")
 					errors <- err
@@ -213,7 +205,8 @@ func (m *Merger) getMergeResult(ctx context.Context, tables []*compactions.Table
 		}
 
 		if currentSize != 0 {
-			table := compactions.NewTable(f, fid, currentSize)
+			f.Close()
+			table := compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize)
 			result <- table
 		}
 		return nil
@@ -222,132 +215,48 @@ func (m *Merger) getMergeResult(ctx context.Context, tables []*compactions.Table
 	return result, errors
 }
 
+func (m *Merger) getFilesDescriptor(tables []*compactions.Table) ([]*os.File, error) {
+	var files []*os.File
+	for _, table := range tables {
+		f, err := command.OpenSSTFile(table.Dir(), table.Id(), os.O_RDONLY|os.O_SYNC)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, f)
+	}
+	return files, nil
+}
+
 func (m *Merger) Merge(mergeTables []*compactions.Table) ([]*compactions.Table, error) {
 	var tables []*compactions.Table
+
+	files, err := m.getFilesDescriptor(mergeTables)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		for _, file := range files{
+			file.Close()
+		}
+		command.SyncDir(m.controller.db.Config.DataFolder)
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
-	result, errors := m.getMergeResult(ctx, mergeTables)
+	result, errors := m.getMergeResult(ctx, files)
 	for {
 		select {
 		case table := <- result:
 			if table == nil {
-				goto EXIT
+				return tables, nil
 			}
 			tables = append(tables, table)
 		case err := <-errors :
 			cancel()
 			m.Wait()
-			os.Exit(1)
 			return nil, err
 		}
 	}
-
-	EXIT:
-	return tables, nil
-}
-
-func MergeTables(tables []*compactions.Table, c *Controller) error {
-
-	from := getFiles(tables)
-	readers := getReaders(from)
-
-	var (
-		saveMin bool
-		writeBuffer bytes.Buffer
-		wg sync.WaitGroup
-	)
-
-	wc := make(chan struct{}, 1)
-
-	currentSize := 0
-
-	var f *os.File
-	var err error
-	var fid int64
-	var tablesResult []*compactions.Table
-
-	mergeBlocks := NewMergeBlocks(readers)
-	for nextBlocks := getNextBlock(mergeBlocks); len(mergeBlocks.readers) > 0; nextBlocks = getNextBlock(mergeBlocks) {
-		saveMin = false
-		sortedBlocks := sortedBlocks(nextBlocks)
-		mergeBlocks.nextBlocks.Clear()
-		sort.Sort(sortedBlocks)
-		minKey := sortedBlocks[0].Key()
-
-		for i := 0; i < mergeBlocks.countReader; i++ {
-			block, ok := mergeBlocks.blocks[i]
-			if ok && bytes.Compare(minKey, block.Key()) == 0 {
-				if !saveMin {
-					saveMin = true
-					writeBuffer.Write(compactions.MarshalBlock(block))
-					if writeBuffer.Len() >= write_batch_lenght {
-						wc <- struct{}{}
-						wg.Add(1)
-
-						data := make([]byte, writeBuffer.Len())
-						copy(data, writeBuffer.Bytes())
-
-						go func(b []byte, i int) error {
-							defer wg.Done()
-
-							fmt.Println(string(b))
-							if f == nil || (currentSize + len(b) > c.db.Config.MaxFileSize) {
-								if currentSize + len(b) > c.db.Config.MaxFileSize {
-									table := compactions.NewTable(f, fid, currentSize)
-									tablesResult = append(tablesResult, table)
-									currentSize = 0
-								}
-
-								fid = c.GetVersionTable().Inc()
-								f, err = command.CreateSSTFile(c.db.Config.DataFolder, fid)
-								if err != nil {
-									//todo логировать ошибки мержа
-									return err
-								}
-							}
-
-							f.Write(b)
-							currentSize += len(data)
-
-							<-wc
-							return nil
-						}(data, i)
-						writeBuffer.Reset()
-					}
-				}
-				mergeBlocks.blocks[i] = nil
-			}
-		}
-	}
-
-	wg.Wait()
-
-	if writeBuffer.Len() > 0 {
-		if currentSize + len(writeBuffer.Bytes()) > c.db.Config.MaxFileSize {
-			table := compactions.NewTable(f, fid, currentSize)
-			tablesResult = append(tablesResult, table)
-			currentSize = 0
-
-			fid = c.GetVersionTable().Inc()
-			f, err = command.CreateSSTFile(c.db.Config.DataFolder, fid)
-			if err != nil {
-				return err
-			}
-		}
-
-		f.Write(writeBuffer.Bytes())
-		currentSize += writeBuffer.Len()
-
-		fmt.Println(string(writeBuffer.Bytes()))
-		//to.Write(writeBuffer.Bytes())
-	}
-
-	if currentSize != 0 {
-		table := compactions.NewTable(f, fid, currentSize)
-		tablesResult = append(tablesResult, table)
-	}
-
-	os.Exit(1)
-	return nil
 }
 
 func getReaders(from []*os.File) []compactions.BlockReader {
