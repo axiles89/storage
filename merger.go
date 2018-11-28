@@ -251,7 +251,7 @@ func (m *Merger) Merge(mergeTables []*compactions.Table) ([]*compactions.Table, 
 				return tables, nil
 			}
 			tables = append(tables, table)
-		case err := <-errors :
+		case err := <-errors:
 			cancel()
 			m.Wait()
 			return nil, err

@@ -1,23 +1,28 @@
 package memtable
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"time"
-	"bytes"
 )
 
+// todo убрать ограничение на лимит в 40 уровней
 const maxLevel = 40
 const p = 0.25
+const typeHead int8 = 1
+const typeList int8 = 2
 
 type updateLink [maxLevel]struct{
-	before *node
+	offset int
+	typeNode int8
 }
 
-func (ul *updateLink) set(level int, before *node) {
+func (ul *updateLink) set(level int, typeNode int8, offset int) {
 	ul[level] = struct {
-		before *node
-	}{before:before}
+		offset int
+		typeNode int8
+	}{offset:offset, typeNode:typeNode}
 }
 
 func newNode(key, value []byte) *node{
@@ -148,9 +153,6 @@ func (sl *SkipList) Search(key []byte) []byte {
 	for level:= sl.level - 1; level >= 0; level-- {
 		for {
 			offset := currentNode.forward[level]
-			if offset == 4 {
-				fmt.Println("offset 4")
-			}
 			if offset == 0 {
 				break
 			}
@@ -172,65 +174,47 @@ func (sl *SkipList) Search(key []byte) []byte {
 	return nil
 }
 
-func (sl *SkipList) findNodeForUpdateV2(key []byte) *[maxLevel]struct{
-	typeNode string
-	offset int
-} {
-	update := [maxLevel]struct{
-		typeNode string
-		offset int
-	}{}
+func (sl *SkipList) findNodeForUpdate(key []byte) *updateLink {
+	update := updateLink{}
 
 	currentOffset := 0
 	currentNode := sl.head
-	var typeNode string
+	var typeNode int8
 	for level:= sl.level - 1; level >= 0; level-- {
 		for {
 			offset := currentNode.forward[level]
 			if offset == 0 {
 				if currentOffset == 0 {
-					typeNode = "head"
+					typeNode = typeHead
 				} else {
-					typeNode = "list"
+					typeNode = typeList
 				}
 
-				update[level] = struct {
-					typeNode string
-					offset   int
-				}{typeNode: typeNode, offset: currentOffset}
+				update.set(level, typeNode, currentOffset)
 				break
 			}
 			nextNode := sl.nodesRepository.GetByNumber(offset)
 			// key < nn.k
 			if bytes.Compare(key,nextNode.key) == -1 {
 				if currentOffset == 0 {
-					typeNode = "head"
+					typeNode = typeHead
 				} else {
-					typeNode = "list"
+					typeNode = typeList
 				}
 
-				update[level] = struct {
-					typeNode string
-					offset   int
-				}{typeNode: typeNode, offset: currentOffset}
+				update.set(level, typeNode, currentOffset)
 				break
 			}
 			// key == nn.k (обновляем элемент)
 			if bytes.Compare(key, nextNode.key) == 0 {
-				update[level] = struct {
-					typeNode string
-					offset   int
-				}{typeNode: "list", offset: offset}
+				update.set(level, typeList, offset)
 				break
 			}
 			currentNode = nextNode
 			currentOffset = offset
 			// key > nn.k и nn последний элемент уровня и начинаем следующий уровень с этого элемента
 			if nextNode.forward[level] == 0 {
-				update[level] = struct {
-					typeNode string
-					offset   int
-				}{typeNode: "list", offset: currentOffset}
+				update.set(level, typeList, currentOffset)
 				break
 			}
 		}
@@ -238,45 +222,12 @@ func (sl *SkipList) findNodeForUpdateV2(key []byte) *[maxLevel]struct{
 	return &update
 }
 
-func (sl *SkipList) findNodeForUpdate(key []byte) *updateLink {
-	update := updateLink{}
-
-	currentNode := sl.head
-	for level:= sl.level - 1; level >= 0; level-- {
-		for {
-			offset := currentNode.forward[level]
-			if offset == 0 {
-				update.set(level, currentNode)
-				break
-			}
-			nextNode := sl.nodesRepository.GetByNumber(offset)
-			// key < nn.k
-			if bytes.Compare(key,nextNode.key) == -1 {
-				update.set(level, currentNode)
-				break
-			}
-			// key == nn.k (обновляем элемент)
-			if bytes.Compare(key, nextNode.key) == 0 {
-				update.set(level, currentNode)
-				break
-			}
-			currentNode = nextNode
-			// key > nn.k и nn последний элемент уровня и начинаем следующий уровень с этого элемента
-			if nextNode.forward[level] == 0 {
-				update.set(level, nextNode)
-				break
-			}
-		}
-	}
-	return &update
-}
-
-func (sl *SkipList) InsertV2(key []byte, value []byte) int {
-	update := sl.findNodeForUpdateV2(key)
+func (sl *SkipList) Insert(key []byte, value []byte) int {
+	update := sl.findNodeForUpdate(key)
 
 	// Ищем сперва по первому уровню, если находим, то просто обновляем ключ и значение без перестраивания ссылок
 	var newNodeLink *node
-	if update[0].typeNode != "head" {
+	if update[0].typeNode != typeHead {
 		newNodeLink = sl.nodesRepository.GetByNumber(update[0].offset)
 	}
 	if newNodeLink != nil && bytes.Equal(key, newNodeLink.key) {
@@ -284,25 +235,19 @@ func (sl *SkipList) InsertV2(key []byte, value []byte) int {
 	} else {
 		newNode := newNode(key, value)
 		levelNode := sl.randomLevel()
-		if string(newNode.key) == "l" {
-			levelNode = 2
-		}
 
 		//todo Разобраться действительно ли выигрываем по gc при добавлении не по ссылке
 		offset, newNodeLink := sl.nodesRepository.Add(*newNode)
 		if levelNode > sl.level {
 			for level := sl.level + 1; level <= levelNode; level++ {
-				update[level - 1] = struct {
-					typeNode string
-					offset   int
-				}{typeNode: "head", offset: 0}
+				update.set(level - 1, typeHead, 0)
 			}
 			sl.level = levelNode
 		}
 
 		for level, updateNodes := range update[0:levelNode] {
 			var editNode *node
-			if updateNodes.typeNode == "head" {
+			if updateNodes.typeNode == typeHead {
 				editNode = sl.head
 			} else {
 				editNode = sl.nodesRepository.GetByNumber(updateNodes.offset)
@@ -312,54 +257,7 @@ func (sl *SkipList) InsertV2(key []byte, value []byte) int {
 		}
 	}
 
-	return len(value)
-}
-
-func (sl *SkipList) Insert(key []byte, value []byte) int {
-	if len(sl.nodesRepository.nodes) == 4 || len(sl.nodesRepository.nodes) == 5 {
-		fmt.Println("skiplist 4 or 5")
-	}
-
-	update := sl.findNodeForUpdate(key)
-
-	// Ищем сперва по первому уровню, если находим, то просто обновляем ключ и значение без перестраивания ссылок
-	newNodeLink := sl.nodesRepository.GetByNumber(update[0].before.forward[0])
-	if newNodeLink != nil && bytes.Equal(key, newNodeLink.key) {
-		newNodeLink.value = value
-	} else {
-		newNode := newNode(key, value)
-		levelNode := sl.randomLevel()
-
-		//if string(key) == "a" {
-		//	levelNode = 4
-		//} else if string(key) == "b" {
-		//	levelNode = 3
-		//} else if string(key) == "c" {
-		//	levelNode = 1
-		//}
-		//todo Разобраться действительно ли выигрываем по gc при добавлении не по ссылке
-		offset, newNodeLink := sl.nodesRepository.Add(*newNode)
-		fmt.Printf("new mode link %p \n", newNodeLink)
-		if levelNode > sl.level {
-			for level := sl.level + 1; level <= levelNode; level++ {
-				update.set(level - 1, sl.head)
-			}
-			sl.level = levelNode
-		}
-
-		for level, updateNodes := range update[0:levelNode] {
-			editNode := updateNodes.before
-			if len(sl.nodesRepository.nodes) == 5  {
-				fmt.Printf("edit link %p \n", editNode)
-				fmt.Println("test")
-			}
-
-			(*newNodeLink).forward[level] = updateNodes.before.forward[level]
-			(*editNode).forward[level] = offset
-		}
-	}
-
-	//fmt.Println("skiplist len = ", len(sl.nodesRepository.nodes))
+	fmt.Println("len skiplist = ", (sl.nodesRepository.size / 1024) / 1024)
 
 	return len(value)
 }

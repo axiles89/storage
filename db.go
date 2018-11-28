@@ -1,17 +1,16 @@
 package storage_db
 
 import (
-	"storage-db/memtable"
-	"sync"
-	"time"
-	"storage-db/types"
-	"storage-db/compactions"
-	"github.com/pkg/errors"
 	"bytes"
-	"storage-db/command"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"os"
-	"fmt"
+	"storage-db/command"
+	"storage-db/compactions"
+	"storage-db/memtable"
+	"storage-db/types"
+	"sync"
+	"time"
 )
 
 var errWaitFlush = errors.New("Wait to flush memtable")
@@ -55,8 +54,6 @@ func (db *Db) flushMemtable() error {
 	for {
 		select {
 		case mt := <-db.flushChan:
-			fmt.Print("flush")
-			continue
 			fid := db.compactController.GetVersionTable().Inc()
 
 			f, err := command.OpenSSTFile(db.Config.DataFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
@@ -71,7 +68,6 @@ func (db *Db) flushMemtable() error {
 				size int
 			)
 			for it.Rewind(); it.Valid(); it.Next() {
-				fmt.Println(it.Key())
 				block := compactions.NewBlock(it.Key(), it.Value())
 				size += block.Size()
 				buf.Write(compactions.MarshalBlock(block))
@@ -100,7 +96,7 @@ func (db *Db) writeEntities(entities []*types.Entity) {
 	for _, entity := range entities {
 		// todo нужен лок?
 		db.Lock()
-		db.mt.InsertV2(entity.GetKey(), entity.GetValue())
+		db.mt.Insert(entity.GetKey(), entity.GetValue())
 		db.Unlock()
 		for err := db.ensureWriteMemtable(); err == errWaitFlush; err = db.ensureWriteMemtable() {
 			db.logger.Warnln("Flush chan is full")

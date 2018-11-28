@@ -1,8 +1,8 @@
 package memtable
 
 import (
-	"testing"
 	"bytes"
+	"testing"
 )
 
 type testData struct {

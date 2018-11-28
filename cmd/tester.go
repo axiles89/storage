@@ -15,6 +15,9 @@ import (
 	"bytes"
 )
 
+const chankSize = 1000
+const timeSince = 200000000000
+
 var config = storage_db.DefaultConfig
 var db, _ = storage_db.NewStorage(&config, storage_db.GetLogger())
 var readChan = make(chan []byte, 10000)
@@ -22,7 +25,6 @@ var errors = make(chan error)
 
 
 func main() {
-
 	//db.Set([]byte("k"), []byte("value"))
 	//db.Set([]byte("l"), []byte("value"))
 	//db.Set([]byte("m"), []byte("value"))
@@ -55,13 +57,6 @@ func main() {
 			os.Exit(1)
 		}
 	}
-
-	//i := uint64(8850340428223689232)
-	//key := make([]byte, binary.MaxVarintLen64)
-	//n := binary.PutUvarint(key, i)
-	//valueFromDb, err := db.Get(key[:n])
-	//fmt.Println(valueFromDb, err)
-	//os.Exit(1)
 	
 	var (
 		wg sync.WaitGroup
@@ -86,14 +81,11 @@ func main() {
 		fmt.Println("Exit with error")
 	}
 
-	time.Sleep(10 * time.Second)
 	fmt.Println("End tester")
 }
 
 func read(wg *sync.WaitGroup, ctx context.Context) {
 	defer wg.Done()
-
-	i := 0
 	
 	for {
 		select {
@@ -106,13 +98,6 @@ func read(wg *sync.WaitGroup, ctx context.Context) {
 				return
 			}
 
-			i++
-			if i == 4 {
-				fmt.Print("chunk 41 get")
-			}
-
-			//fmt.Println("get i = ", i)
-
 			valueFromDb, err := db.Get(key)
 			k, _ := binary.Uvarint(key)
 			if err != nil {
@@ -123,14 +108,12 @@ func read(wg *sync.WaitGroup, ctx context.Context) {
 			} else {
 				value, _ := binary.Uvarint(valueFromDb)
 				if bytes.Compare(key, valueFromDb) != 0 {
-
-					fmt.Println("get error i = ", i)
 					fmt.Printf("Get key = %d != value = %d", k, value)
 					errors <- err
 					fmt.Printf("Exit write with error \n")
 					return
 				}
-				//fmt.Printf("Get key = %d value = %d \n", k, value)
+				fmt.Printf("Get key = %d value = %d \n", k, value)
 			}
 		}
 	}
@@ -146,13 +129,12 @@ func write(wg *sync.WaitGroup, ctx context.Context) {
 		rkey uint64
 	)
 
-	chunk := make([][]byte, 0, 200)
+	chunk := make([][]byte, 0, chankSize)
 
 	now := time.Now().UTC()
 
 	i := 0
-
-	for time.Since(now).Seconds() < 440 {
+	for time.Since(now).Seconds() < timeSince {
 		select {
 		case <-ctx.Done():
 			fmt.Println("Exit write with context \n")
@@ -162,21 +144,18 @@ func write(wg *sync.WaitGroup, ctx context.Context) {
 
 			key := make([]byte, binary.MaxVarintLen64)
 			n = binary.PutUvarint(key, rkey)
-
 			i++
 
-			if i == 4 {
-				fmt.Println("chunk 41 set")
+			if i == 200000 {
+				fmt.Println("d")
 			}
-			fmt.Println("set i = ", i)
 			db.Set(key[:n], key[:n])
-			//time.Sleep(200 * time.Millisecond)
-			//fmt.Printf("Set key = %d value = %d \n", rkey, rkey)
-			if len(chunk) != 2 {
+			if len(chunk) != chankSize {
 				chunk = append(chunk, key[:n])
 			} else {
-				time.Sleep(1000 * time.Millisecond)
-				fmt.Println("Start send to read chan")
+				time.Sleep(5 * time.Millisecond)
+
+				fmt.Println("Start send to read chan ", i)
 				for _, value := range chunk {
 					readChan <- value
 				}
