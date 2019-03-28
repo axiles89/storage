@@ -20,13 +20,13 @@ func init() {
 	dir, _ := os.Getwd()
 	DefaultConfig = Config{
 		FlushBufferSize:             10,
-		MemtableSize:                3000,
+		MemtableSize:                3,
 		FileNumCompactionTrigger:    3,
 		MaxSizeAmplificationPercent: 20,
 		NumLevels:                   10,
 		SizeRatio:                   0.1,
 		DataFolder:                  dir + "/sst",
-		MaxFileSize:                 50000,
+		MaxFileSize:                 29,
 	}
-	DefaultConfig.WriteBufferSize = 1
+	DefaultConfig.WriteBufferSize = 100
 }

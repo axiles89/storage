@@ -1,13 +1,13 @@
 package storage_db
 
 import (
+	"fmt"
+	"github.com/sirupsen/logrus"
+	"storage-db/command"
+	"storage-db/compactions"
 	"storage-db/types"
 	"sync"
-	"fmt"
 	"time"
-	"storage-db/compactions"
-	"storage-db/command"
-	"github.com/sirupsen/logrus"
 )
 
 type Controller struct {
@@ -45,23 +45,23 @@ func NewController(db *Db) (*Controller, error) {
 	//	controller.AddTablesForLevel(tables, 0)
 	//}
 
-	//tables := make([]*compactions.Table, 0)
+	tables := make([]*compactions.Table, 0)
 	//f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 6), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	//table := compactions.NewTable(f, 6, 13)
-	//tables = append(tables, table)
-	//controller.AddTablesForLevel(tables, 0)
-	//
-	//tables = make([]*compactions.Table, 0)
+	table := compactions.NewTable("/Users/dikushnerev/go/src/storage-db", 6, 13, nil, nil)
+	tables = append(tables, table)
+	controller.AddTablesForLevel(tables, 0)
+
+	tables = make([]*compactions.Table, 0)
 	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 7), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	//table = compactions.NewTable(f, 7, 10)
-	//tables = append(tables, table)
-	//controller.AddTablesForLevel(tables, 0)
-	//
-	//tables = make([]*compactions.Table, 0)
+	table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", 7, 10, nil, nil)
+	tables = append(tables, table)
+	controller.AddTablesForLevel(tables, 0)
+
+	tables = make([]*compactions.Table, 0)
 	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 8), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	//table = compactions.NewTable(f, 8, 10)
-	//tables = append(tables, table)
-	//controller.AddTablesForLevel(tables, 0)
+	table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", 8, 10, nil, nil)
+	tables = append(tables, table)
+	controller.AddTablesForLevel(tables, 0)
 
 	return controller, nil
 }
@@ -187,8 +187,6 @@ func (c *Controller) getTableBySpaceAmplification(sortedRuns []*compactions.Sort
 		}
 	}
 
-	//var tables1 []*compactions.Table
-
 	return tables, c.db.Config.NumLevels - 1, len(sortedRuns)
 }
 
@@ -217,6 +215,7 @@ func (c *Controller) StartCompaction() error {
 
 				c.Lock()
 				mergeSr := 0
+
 				// todo Потенциально опасное место - покрыть тестами
 				for level := 0; level <= targetLevel; level++ {
 					if sortedRunsByLevel, ok := c.levels[level]; ok {

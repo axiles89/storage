@@ -11,7 +11,8 @@ import (
 	"context"
 )
 
-const write_batch_lenght = 2
+// <= MaxFileSize
+const write_batch_lenght = 22
 
 type sortedBlocks []*compactions.Block
 func (sb sortedBlocks) Len() int { return len(sb)}
@@ -93,22 +94,27 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 	errors := make(chanError)
 	m.Add(1)
 	go func() error {
-		defer func() {
-			close(result)
-			m.Done()
-		}()
-
-		readers := getReaders(files)
 		var	(
 			saveMin bool
 			f *os.File
 			fid int64
 			err error
 			currentSize = 0
-			wg sync.WaitGroup
+			min, max []byte
+			table *compactions.Table
 		)
 
+		defer func() {
+			close(result)
+			m.Done()
+			if f != nil {
+				f.Close()
+			}
+		}()
+
 		wc := make(chan struct{}, 1)
+
+		readers := getReaders(files)
 
 		mergeBlocks := NewMergeBlocks(readers)
 		for nextBlocks := getNextBlock(mergeBlocks); len(mergeBlocks.readers) > 0; nextBlocks = getNextBlock(mergeBlocks) {
@@ -123,7 +129,14 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 				if ok && bytes.Compare(minKey, block.Key()) == 0 {
 					if !saveMin {
 						saveMin = true
+
+						if m.writeBuffer.Len() == 0 {
+							min = block.Key()
+						}
+						max = block.Key()
+
 						m.writeBuffer.Write(compactions.MarshalBlock(block))
+
 						if m.writeBuffer.Len() >= write_batch_lenght {
 							select {
 							case <-ctx.Done():
@@ -132,19 +145,16 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 							case wc <- struct{}{}:
 							}
 
-							wg.Add(1)
-
 							data := make([]byte, m.writeBuffer.Len())
 							copy(data, m.writeBuffer.Bytes())
 
-							go func(b []byte, i int) error {
-								defer wg.Done()
-
+							go func(b, min, max []byte) error {
 								if f == nil || (currentSize + len(b) > m.controller.db.Config.MaxFileSize) {
-									if currentSize + len(b) > m.controller.db.Config.MaxFileSize {
+									if currentSize + len(b) > m.controller.db.Config.MaxFileSize && f != nil {
 										f.Close()
-										table := compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize)
+										table.AddSize(currentSize)
 										result <- table
+										table = nil
 										currentSize = 0
 									}
 
@@ -155,6 +165,10 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 										errors <- err
 										return err
 									}
+
+									if table == nil {
+										table = compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize, min, nil)
+									}
 								}
 
 								_, err = f.Write(b)
@@ -164,9 +178,10 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 									return err
 								}
 								currentSize += len(data)
+								table.SetMax(max)
 								<-wc
 								return nil
-							}(data, i)
+							}(data, min, max)
 							m.writeBuffer.Reset()
 						}
 					}
@@ -175,14 +190,21 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 			}
 		}
 
-		wg.Wait()
+
+		select {
+		case <-ctx.Done():
+			m.controller.db.logger.Info("Exit from merge with context done")
+			return nil
+		case wc <- struct{}{}:
+		}
 
 		if m.writeBuffer.Len() > 0 {
 			if f == nil || currentSize + m.writeBuffer.Len() > m.controller.db.Config.MaxFileSize {
 				if currentSize + m.writeBuffer.Len() > m.controller.db.Config.MaxFileSize {
 					f.Close()
-					table := compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize)
+					table.AddSize(currentSize)
 					result <- table
+					table = nil
 					currentSize = 0
 				}
 
@@ -193,6 +215,10 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 					errors <- err
 					return err
 				}
+
+				if table == nil {
+					table = compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize, min, nil)
+				}
 			}
 
 			_, err = f.Write(m.writeBuffer.Bytes())
@@ -202,12 +228,15 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 				return err
 			}
 			currentSize += m.writeBuffer.Len()
+			table.SetMax(max)
+			m.writeBuffer.Reset()
 		}
 
 		if currentSize != 0 {
 			f.Close()
-			table := compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize)
+			table.AddSize(currentSize)
 			result <- table
+			table = nil
 		}
 		return nil
 	}()

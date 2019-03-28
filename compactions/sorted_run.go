@@ -1,6 +1,7 @@
 package compactions
 
 import (
+	"fmt"
 	"time"
 	"storage-db/types"
 	"bufio"
@@ -26,12 +27,39 @@ func NewSortedRun(level int, tables []*Table, createTime time.Time) *SortedRun {
 	}
 }
 
+func (sr *SortedRun) binarySearch(key []byte) *Table {
+	var (
+		i int
+		searchTables = sr.tables
+	)
+	for len(searchTables) > 0 {
+		i = len(searchTables) / 2
+		if bytes.Compare(key, searchTables[i].min) >= 0 && bytes.Compare(key, searchTables[i].max) <= 0  {
+			return searchTables[i]
+		}
+		if bytes.Compare(key, searchTables[i].max) > 0 && i != len(searchTables) - 1 {
+			searchTables = searchTables[i + 1:]
+			continue
+		} else if bytes.Compare(key, searchTables[i].min) < 0 && i != 0 {
+			searchTables = searchTables[i - 1: i];
+			continue
+		}
+		break
+	}
+	return  nil
+}
+
 func (sr *SortedRun) Search(key []byte) ([]byte, error) {
 	var (
 		block *Block
 		err error
 	)
 	var f *os.File
+
+	table := sr.binarySearch(key)
+	fmt.Println(table)
+	os.Exit(1)
+
 	for _, table := range sr.tables {
 		f, err = command.OpenSSTFile(table.Dir(), table.Id(), os.O_RDONLY|os.O_SYNC)
 		if err != nil {

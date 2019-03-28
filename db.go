@@ -79,7 +79,7 @@ func (db *Db) flushMemtable() error {
 				return err
 			}
 
-			table := compactions.NewTable(db.Config.DataFolder, fid, size)
+			table := compactions.NewTable(db.Config.DataFolder, fid, size, nil, nil)
 			db.compactController.AddTableForLevel0(table)
 
 			db.Lock()

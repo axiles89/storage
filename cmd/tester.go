@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -47,14 +48,12 @@ func main() {
 
 	files, err := ioutil.ReadDir(config.DataFolder)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 	for _, file := range files {
 		err := os.Remove(config.DataFolder + "/" + file.Name())
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			log.Fatal(err)
 		}
 	}
 	
@@ -146,9 +145,6 @@ func write(wg *sync.WaitGroup, ctx context.Context) {
 			n = binary.PutUvarint(key, rkey)
 			i++
 
-			if i == 200000 {
-				fmt.Println("d")
-			}
 			db.Set(key[:n], key[:n])
 			if len(chunk) != chankSize {
 				chunk = append(chunk, key[:n])

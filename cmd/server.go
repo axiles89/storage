@@ -15,16 +15,100 @@ type node struct {
 type test struct {
 	arr []node
 }
-func main() {
 
-	arr := test{[]node{{1}, {2}, {3}}}
-	arr0 := &(arr.arr[1])
-	(*arr0).n = 33
-	fmt.Println(arr0)
-	for _, v := range arr.arr {
-		fmt.Println(v)
+type Meta struct {
+	min int
+	max int
+}
+
+func search2(arr []*Meta, key int) *Meta  {
+	if (len(arr) == 0) {
+		return nil
 	}
-	os.Exit(1)
+	var (
+		i int
+		seacrhArr = arr
+	)
+	for len(seacrhArr) > 0 {
+		i = len(seacrhArr) / 2
+		if key <= arr[i].max && key >= arr[i].min {
+			return arr[i]
+		}
+		if key > arr[i].max && i != len(arr) - 1 {
+			seacrhArr = arr[i + 1:]
+			continue
+		} else if key < arr[i].min && i != 0 {
+			seacrhArr = arr[i - 1: i]
+			continue
+		}
+		break
+	}
+	return nil
+}
+
+func search(arr *[]*Meta, key int) *Meta {
+	i := len(*arr) / 2
+	elem := (*arr)[i]
+	if key <= elem.max && key >= elem.min {
+		(*arr)[i].max = 44444
+ 		return (*arr)[i]
+	}
+	if key > elem.max && i != len(*arr) - 1 {
+		ad := (*arr)[i + 1:]
+		return search(&ad, key)
+	} else if key < elem.min && i != 0 {
+		ad := (*arr)[i - 1: i]
+		return search(&ad, key)
+	}
+	return nil
+}
+
+func main() {
+	//var arrMeta []*Meta
+	//m1 := Meta{
+	//	min: 20,
+	//	max: 40,
+	//}
+	//arrMeta = append(arrMeta, &m1)
+	//
+	//m2 := Meta{
+	//	min: 60,
+	//	max: 90,
+	//}
+	//arrMeta = append(arrMeta, &m2)
+	//
+	//m3 := Meta{
+	//	min: 100,
+	//	max: 105,
+	//}
+	//arrMeta = append(arrMeta, &m3)
+	//
+	//res := search2(arrMeta, 70)
+	//
+	//fmt.Println(res)
+	//
+	//os.Exit(1)
+	//
+	////fmt.Printf("%p \n", &arrMeta[2])
+	//fmt.Printf("%p \n", arrMeta)
+	//fmt.Println(res)
+	//fmt.Println(arrMeta)
+	//os.Exit(1)
+	//
+	//
+	//
+	//arr := test{[]node{{1}, {2}, {3}}}
+	//arr0 := &(arr.arr[1])
+	//(*arr0).n = 33
+	//fmt.Println(arr0)
+	//for _, v := range arr.arr {
+	//	fmt.Println(v)
+	//}
+
+
+
+
+	//os.Exit(1)
 	//arr := []test{{1},{2},{3}}
 	//fmt.Println(arr)
 	//
@@ -107,6 +191,14 @@ func main() {
 	}
 
 	db, _ := storage_db.NewStorage(&config, storage_db.GetLogger())
+
+	time.Sleep(1 * time.Second)
+	db.Get([]byte("ц"))
+
+	select {
+
+	}
+	os.Exit(1)
 
 	db.Set([]byte("n"), []byte("value"))
 	db.Set([]byte("k"), []byte("value"))

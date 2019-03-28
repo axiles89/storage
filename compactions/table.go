@@ -1,12 +1,12 @@
 package compactions
 
 import (
-	"encoding/binary"
 	"bytes"
-	"io"
-	"storage-db/types"
+	"encoding/binary"
 	"errors"
 	errors2 "github.com/pkg/errors"
+	"io"
+	"storage-db/types"
 )
 
 var ErrReadNullTerm = errors.New("Error read null term")
@@ -110,13 +110,17 @@ type Table struct {
 	dir string
 	id int64
 	size int
+	min []byte
+	max []byte
 }
 
-func NewTable(dir string, id int64, size int) *Table {
+func NewTable(dir string, id int64, size int, min, max []byte) *Table {
 	return &Table{
 		dir:dir,
 		id:id,
 		size:size,
+		min:min,
+		max:max,
 	}
 }
 
@@ -130,4 +134,12 @@ func (t *Table) Id() int64 {
 
 func (t *Table) Size() int {
 	return t.size
+}
+
+func (t *Table) AddSize(size int) {
+	t.size += size
+}
+
+func (t *Table) SetMax(max []byte) {
+	t.max = max
 }

@@ -2,7 +2,6 @@ package memtable
 
 import (
 	"bytes"
-	"fmt"
 	"math/rand"
 	"time"
 )
@@ -72,6 +71,7 @@ func (i *Iterator) Value() []byte {
 	return i.currentnode.value
 }
 
+// todo Оптимизация - хранить не слайс node, который копируется при привышении cap, а прям слайс байт размером из конфига, тогда не будет копирования
 type nodesRepository struct {
 	nodes []node
 	size int
@@ -80,13 +80,8 @@ type nodesRepository struct {
 func newNodesRepository() *nodesRepository {
 	return &nodesRepository{
 		size: 0,
-		nodes: make([]node, 0, 1),
+		nodes: make([]node, 0, 10000),
 	}
-}
-
-//todo удалить
-func (r *nodesRepository) Len() (int) {
-	return len(r.nodes)
 }
 
 func (r *nodesRepository) GetByNumber(number int) *node {
@@ -120,11 +115,6 @@ func NewSkipList() *SkipList {
 		head: &head,
 		nodesRepository: newNodesRepository(),
 	}
-}
-
-//todo удалить
-func (sl *SkipList) GetNodes() *nodesRepository {
-	return sl.nodesRepository
 }
 
 func (sl *SkipList) Getiterator() *Iterator {
@@ -256,8 +246,6 @@ func (sl *SkipList) Insert(key []byte, value []byte) int {
 			(*editNode).forward[level] = offset
 		}
 	}
-
-	fmt.Println("len skiplist = ", (sl.nodesRepository.size / 1024) / 1024)
 
 	return len(value)
 }
