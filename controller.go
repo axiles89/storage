@@ -45,23 +45,36 @@ func NewController(db *Db) (*Controller, error) {
 	//	controller.AddTablesForLevel(tables, 0)
 	//}
 
-	tables := make([]*compactions.Table, 0)
-	//f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 6), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	table := compactions.NewTable("/Users/dikushnerev/go/src/storage-db", 6, 13, nil, nil)
-	tables = append(tables, table)
-	controller.AddTablesForLevel(tables, 0)
+	//tables := make([]*compactions.Table, 0)
+	////f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 6), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table := compactions.NewTable("/Users/dikushnerev/go/src/storage-db/sst", "/Users/dikushnerev/go/src/storage-db/sst/index", 1, 13, []byte{'a'}, []byte{'t'})
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
 
-	tables = make([]*compactions.Table, 0)
-	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 7), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", 7, 10, nil, nil)
-	tables = append(tables, table)
-	controller.AddTablesForLevel(tables, 0)
+	//tables := make([]*compactions.Table, 0)
+	////f, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 6), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table := compactions.NewTable("/Users/dikushnerev/go/src/storage-db", "", 6, 13, nil, nil)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
+	//
+	//tables = make([]*compactions.Table, 0)
+	////f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 7), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", "", 7, 10, nil, nil)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
+	//
+	//tables = make([]*compactions.Table, 0)
+	////f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 8), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", "", 8, 10, nil, nil)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
+	////
+	//tables = make([]*compactions.Table, 0)
+	////f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 8), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
+	//table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", "",4, 10, nil, nil)
+	//tables = append(tables, table)
+	//controller.AddTablesForLevel(tables, 0)
 
-	tables = make([]*compactions.Table, 0)
-	//f, _ = os.OpenFile(fmt.Sprintf("%s/%d.sst", "/Users/dikushnerev/go/src/storage-db", 8), os.O_CREATE|os.O_SYNC|os.O_RDWR, 0666)
-	table = compactions.NewTable("/Users/dikushnerev/go/src/storage-db", 8, 10, nil, nil)
-	tables = append(tables, table)
-	controller.AddTablesForLevel(tables, 0)
 
 	return controller, nil
 }
@@ -213,6 +226,10 @@ func (c *Controller) StartCompaction() error {
 					return err
 				}
 
+				//for _, t := range newTables {
+				//	fmt.Printf("table %d min = %d, max = %d \n", t.Id(), binary.BigEndian.Uint32(t.Min()), binary.BigEndian.Uint32(t.Max()))
+				//}
+
 				c.Lock()
 				mergeSr := 0
 
@@ -270,9 +287,17 @@ func (c *Controller) ClearGarbageSortedRuns() error {
 								"id": table.Id(),
 							}).Info("Garbage collector for table")
 						}
+						if err := command.DeleteIdxFile(c.db.Config.IndexFolder, table.Id()); err != nil {
+							c.db.logger.WithError(err).Errorf("Error for delete %d.idx", table.Id())
+						} else {
+							c.db.logger.WithFields(logrus.Fields{
+								"id": table.Id(),
+							}).Info("Garbage collector idx for table")
+						}
 					}
 				}
 				command.SyncDir(c.db.Config.DataFolder)
+				command.SyncDir(c.db.Config.IndexFolder)
 			}
 		}
 	}

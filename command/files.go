@@ -6,6 +6,30 @@ import (
 	"github.com/pkg/errors"
 )
 
+func OpenWalFile(dir string, ncol int64, fid int64, flags int) (*os.File, error) {
+	// O_EXCL
+	f, err := os.OpenFile(fmt.Sprintf("%s/%d_%d.bin", dir, ncol, fid), flags, 0666)
+	if err != nil {
+		return nil, err
+	}
+	if err := SyncDir(dir); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func OpenIdxFile(dir string, fid int64, flags int) (*os.File, error) {
+	// O_EXCL
+	f, err := os.OpenFile(fmt.Sprintf("%s/%d.idx", dir, fid), flags, 0666)
+	if err != nil {
+		return nil, err
+	}
+	if err := SyncDir(dir); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 func OpenSSTFile(dir string, fid int64, flags int) (*os.File, error) {
 	// O_EXCL
 	f, err := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, fid), flags, 0666)
@@ -34,6 +58,14 @@ func SyncDir(dir string) error {
 
 func DeleteSSTFile(dir string, fid int64) error {
 	if err := os.Remove(fmt.Sprintf("%s/%d.sst", dir, fid)); err != nil {
+		return err
+	}
+	SyncDir(dir)
+	return nil
+}
+
+func DeleteIdxFile(dir string, fid int64) error {
+	if err := os.Remove(fmt.Sprintf("%s/%d.idx", dir, fid)); err != nil {
 		return err
 	}
 	SyncDir(dir)

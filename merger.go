@@ -1,18 +1,18 @@
 package storage_db
 
 import (
-	"sort"
-	"bytes"
-	"os"
 	"bufio"
-	"sync"
-	"storage-db/compactions"
-	"storage-db/command"
+	"bytes"
 	"context"
+	"os"
+	"sort"
+	"storage-db/command"
+	"storage-db/compactions"
+	"sync"
 )
 
 // <= MaxFileSize
-const write_batch_lenght = 22
+const write_batch_lenght = 10
 
 type sortedBlocks []*compactions.Block
 func (sb sortedBlocks) Len() int { return len(sb)}
@@ -97,18 +97,26 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 		var	(
 			saveMin bool
 			f *os.File
+			fi *os.File
 			fid int64
 			err error
 			currentSize = 0
-			min, max []byte
+			min, max, indexData []byte
 			table *compactions.Table
+			indexNodes []*compactions.IndexNode
+			indexNode *compactions.IndexNode
+			offset uint32
 		)
 
 		defer func() {
 			close(result)
+			close(errors)
 			m.Done()
 			if f != nil {
 				f.Close()
+			}
+			if fi != nil {
+				fi.Close()
 			}
 		}()
 
@@ -153,8 +161,23 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 									if currentSize + len(b) > m.controller.db.Config.MaxFileSize && f != nil {
 										f.Close()
 										table.AddSize(currentSize)
+
+										indexData = compactions.MarshalTree(indexNodes)
+										fi, err = command.OpenIdxFile(m.controller.db.Config.IndexFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
+										if err != nil {
+											m.controller.db.logger.WithError(err).Error("Error with create new idx file")
+											errors <- err
+											return err
+										}
+
+										_, err = fi.Write(indexData)
+										if err != nil {
+											m.controller.db.logger.WithError(err).Error("Error with write in idx file")
+											errors <- err
+											return err
+										}
+
 										result <- table
-										table = nil
 										currentSize = 0
 									}
 
@@ -166,9 +189,20 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 										return err
 									}
 
-									if table == nil {
-										table = compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize, min, nil)
+									if err != nil {
+										m.controller.db.logger.WithError(err).Error("Error with create new index file")
+										errors <- err
+										return err
 									}
+
+									table = compactions.NewTable(
+										m.controller.db.Config.DataFolder,
+										m.controller.db.Config.IndexFolder,
+										fid,
+										currentSize,
+										min,
+										nil,
+									)
 								}
 
 								_, err = f.Write(b)
@@ -177,8 +211,14 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 									errors <- err
 									return err
 								}
-								currentSize += len(data)
+
 								table.SetMax(max)
+
+								offset = uint32(currentSize)
+								indexNode = compactions.NewIndexNode(min, offset, 0, 0)
+								indexNodes = append(indexNodes, indexNode)
+
+								currentSize += len(b)
 								<-wc
 								return nil
 							}(data, min, max)
@@ -189,7 +229,6 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 				}
 			}
 		}
-
 
 		select {
 		case <-ctx.Done():
@@ -203,8 +242,23 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 				if currentSize + m.writeBuffer.Len() > m.controller.db.Config.MaxFileSize {
 					f.Close()
 					table.AddSize(currentSize)
+
+					indexData = compactions.MarshalTree(indexNodes)
+					fi, err = command.OpenIdxFile(m.controller.db.Config.IndexFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
+					if err != nil {
+						m.controller.db.logger.WithError(err).Error("Error with create new idx file")
+						errors <- err
+						return err
+					}
+
+					_, err = fi.Write(indexData)
+					if err != nil {
+						m.controller.db.logger.WithError(err).Error("Error with write in idx file")
+						errors <- err
+						return err
+					}
+
 					result <- table
-					table = nil
 					currentSize = 0
 				}
 
@@ -216,9 +270,14 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 					return err
 				}
 
-				if table == nil {
-					table = compactions.NewTable(m.controller.db.Config.DataFolder, fid, currentSize, min, nil)
-				}
+				table = compactions.NewTable(
+					m.controller.db.Config.DataFolder,
+					m.controller.db.Config.IndexFolder,
+					fid,
+					currentSize,
+					min,
+					nil,
+				)
 			}
 
 			_, err = f.Write(m.writeBuffer.Bytes())
@@ -227,14 +286,36 @@ func (m *Merger) getMergeResult(ctx context.Context, files []*os.File) (chanResu
 				errors <- err
 				return err
 			}
-			currentSize += m.writeBuffer.Len()
+
 			table.SetMax(max)
+
+			offset = uint32(currentSize)
+			indexNode = compactions.NewIndexNode(min, offset, 0, 0)
+			indexNodes = append(indexNodes, indexNode)
+
+			currentSize += m.writeBuffer.Len()
 			m.writeBuffer.Reset()
 		}
 
 		if currentSize != 0 {
 			f.Close()
 			table.AddSize(currentSize)
+
+			indexData = compactions.MarshalTree(indexNodes)
+			fi, err = command.OpenIdxFile(m.controller.db.Config.IndexFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
+			if err != nil {
+				m.controller.db.logger.WithError(err).Error("Error with create new idx file")
+				errors <- err
+				return err
+			}
+
+			_, err = fi.Write(indexData)
+			if err != nil {
+				m.controller.db.logger.WithError(err).Error("Error with write in idx file")
+				errors <- err
+				return err
+			}
+
 			result <- table
 			table = nil
 		}

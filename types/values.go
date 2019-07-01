@@ -6,6 +6,7 @@ import (
 
 // \u0017
 const NullTerm = 23
+const ReadBufferSize = 20
 
 type Entity struct {
 	key []byte

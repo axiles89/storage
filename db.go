@@ -7,6 +7,7 @@ import (
 	"os"
 	"storage-db/command"
 	"storage-db/compactions"
+	"storage-db/log"
 	"storage-db/memtable"
 	"storage-db/types"
 	"sync"
@@ -21,6 +22,7 @@ type Db struct {
 	flushChan chan *memtable.SkipList
 	writeChan chan *types.Entity
 	compactController *Controller
+	walController *log.WalController
 	Config *Config
 	logger *logrus.Logger
 	sync.RWMutex
@@ -40,7 +42,12 @@ func NewStorage(cfg *Config, logger *logrus.Logger) (*Db, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	db.compactController = controller
+
+	walController := log.NewWalController(cfg.WalFolder, cfg.WalFileSize, cfg.WalBufferSize)
+	db.walController = walController
+
 	go db.compactController.StartCompaction()
 	go db.compactController.ClearGarbageSortedRuns()
 	go db.doWrite()
@@ -49,7 +56,7 @@ func NewStorage(cfg *Config, logger *logrus.Logger) (*Db, error) {
 	return db, nil
 }
 
-// todo Начать учитывать максимальный размер файла
+// todo Начать учитывать максимальный размер файла и строить индекс
 func (db *Db) flushMemtable() error {
 	for {
 		select {
@@ -66,11 +73,24 @@ func (db *Db) flushMemtable() error {
 			var (
 				buf bytes.Buffer
 				size int
+				offset uint32
+				indexNodes []*compactions.IndexNode
+				indexNode *compactions.IndexNode
 			)
 			for it.Rewind(); it.Valid(); it.Next() {
 				block := compactions.NewBlock(it.Key(), it.Value())
+
+				if size == 0 {
+					offset = uint32(size)
+				} else {
+					offset = uint32(size) - 1
+				}
+
 				size += block.Size()
 				buf.Write(compactions.MarshalBlock(block))
+				indexNode = compactions.NewIndexNode(it.Key(), offset, 0, 0)
+				indexNodes = append(indexNodes, indexNode)
+
 			}
 			_, err = f.Write(buf.Bytes())
 			if err != nil {
@@ -79,13 +99,35 @@ func (db *Db) flushMemtable() error {
 				return err
 			}
 
-			table := compactions.NewTable(db.Config.DataFolder, fid, size, nil, nil)
+			indexData := compactions.MarshalTree(indexNodes)
+			fi, err := command.OpenIdxFile(db.Config.IndexFolder, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
+			if err != nil {
+				db.logger.WithError(err).Error("Failed to create level0 idx")
+				return err
+			}
+
+			_, err = fi.Write(indexData)
+			if err != nil {
+				fi.Close()
+				db.logger.WithError(err).Error("Failed to write idx for level0")
+				return err
+			}
+
+			table := compactions.NewTable(
+				db.Config.DataFolder,
+				db.Config.IndexFolder,
+				fid,
+				size,
+				nil,
+				nil,
+			)
 			db.compactController.AddTableForLevel0(table)
 
 			db.Lock()
 			db.qmt = db.qmt[1:]
 			db.Unlock()
 			f.Close()
+			fi.Close()
 		}
 	}
 
@@ -145,6 +187,12 @@ func (db *Db) ensureWriteMemtable() error {
 	if db.mt.Size() < db.Config.MemtableSize {
 		return nil
 	}
+
+	//todo сбрасывать только после флеша
+	if err := db.walController.Reserve(); err != nil {
+		return err
+	}
+
 	select {
 	case db.flushChan<-db.mt:
 		db.qmt = append(db.qmt, db.mt)
@@ -212,9 +260,9 @@ func (db *Db) Set(key, value []byte) int {
 	//os.Exit(1)
 
 
-
 	//todo Проверять на пустой ключ и пустое значение
 	entity := types.NewEntity(key, value)
+	db.walController.Write(entity)
 	db.writeChan <- entity
 	return len(value)
 }

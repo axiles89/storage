@@ -17,6 +17,7 @@ type BlockReader interface {
 	io.ByteReader
 }
 
+//todo Зачем для каждого блока создавать свой буфер???? Почему нельзя при маршалинге создавать? Только тогда, когда нужно
 type Block struct{
 	key []byte
 	value []byte
@@ -86,7 +87,7 @@ func MarshalBlock(b *Block) []byte {
 	n := binary.PutUvarint(blocksKey[:], uint64(len(b.key)))
 	lenKeyBlock := blocksKey[0:n]
 
-	// put variant key legnth
+	// put variant value legnth
 	var blocksValue [binary.MaxVarintLen64]byte
 	n = binary.PutUvarint(blocksValue[:], uint64(len(b.value)))
 	lenValueBlock := blocksValue[0:n]
@@ -107,21 +108,26 @@ func MarshalBlock(b *Block) []byte {
 }
 
 type Table struct {
-	dir string
+	dir, idxDir string
 	id int64
 	size int
 	min []byte
 	max []byte
 }
 
-func NewTable(dir string, id int64, size int, min, max []byte) *Table {
+func NewTable(dir, idxDir string, id int64, size int, min, max []byte) *Table {
 	return &Table{
 		dir:dir,
+		idxDir:idxDir,
 		id:id,
 		size:size,
 		min:min,
 		max:max,
 	}
+}
+
+func (t *Table) IdxDir() string {
+	return t.idxDir
 }
 
 func (t *Table) Dir() string {
@@ -142,4 +148,12 @@ func (t *Table) AddSize(size int) {
 
 func (t *Table) SetMax(max []byte) {
 	t.max = max
+}
+
+func (t *Table) Min() []byte {
+	return t.min
+}
+
+func (t *Table) Max() []byte {
+	return t.max
 }
