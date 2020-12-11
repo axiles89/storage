@@ -244,7 +244,6 @@ func (db *Db) Get(key []byte) ([]byte, error) {
 }
 
 func (db *Db) Set(key, value []byte) int {
-
 	//dir, _ := os.Getwd()
 	//to, _ := os.OpenFile(fmt.Sprintf("%s/%d.sst", dir, 4), os.O_WRONLY|os.O_SYNC|os.O_EXCL, 0666)
 	//

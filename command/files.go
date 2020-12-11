@@ -6,9 +6,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func OpenWalFile(dir string, ncol int64, fid int64, flags int) (*os.File, error) {
+func OpenWalFile(dir string, fid int64, flags int) (*os.File, error) {
 	// O_EXCL
-	f, err := os.OpenFile(fmt.Sprintf("%s/%d_%d.bin", dir, ncol, fid), flags, 0666)
+	f, err := os.OpenFile(fmt.Sprintf("%s/%d.bin", dir, fid), flags, 0666)
 	if err != nil {
 		return nil, err
 	}

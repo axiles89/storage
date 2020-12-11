@@ -7,6 +7,7 @@ import (
 	"storage-db/command"
 	"storage-db/types"
 	"sync"
+	"time"
 )
 
 
@@ -43,8 +44,8 @@ type walFile struct {
 	buffer *bufio.Writer
 }
 
-func newWalFile(dir string, ncol int64, fid int64, bufferSize int) (*walFile,error) {
-	file, err := command.OpenWalFile(dir, ncol, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
+func newWalFile(dir string, fid int64, bufferSize int) (*walFile,error) {
+	file, err := command.OpenWalFile(dir, fid, os.O_CREATE|os.O_WRONLY|os.O_SYNC)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +95,8 @@ type WalFileCollection struct {
 	dir string
 }
 
-func NewWalFileCollection(numberCollection int, dir string, walFileSize, walBufferSize int) *WalFileCollection {
+func NewWalFileCollection(dir string, walFileSize, walBufferSize int) *WalFileCollection {
 	return  &WalFileCollection{
-		numberCollection:numberCollection,
 		dir:dir,
 		walFileSize:walFileSize,
 		walBufferSize:walBufferSize,
@@ -115,7 +115,8 @@ func (wf *WalFileCollection) Write(block []byte) error {
 			wf.currentSize = 0
 		}
 		wf.numberFile++
-		walFile, err := newWalFile(wf.dir, int64(wf.numberCollection), int64(wf.numberFile), wf.walBufferSize)
+		fid := time.Now().UnixNano()
+		walFile, err := newWalFile(wf.dir, fid, wf.walBufferSize)
 		if err != nil {
 			return err
 		}
@@ -143,7 +144,6 @@ func (wf *WalFileCollection) Close() error {
 type WalController struct {
 	currentCollection *WalFileCollection
 	parentCollection []*WalFileCollection
-	numberCollection int
 	dir string
 	walFileSize, walBufferSize int
 	sync.RWMutex
@@ -162,8 +162,7 @@ func (wc *WalController) Write(entity *types.Entity) error {
 	wc.Lock()
 	defer wc.Unlock()
 	if wc.currentCollection == nil {
-		wc.numberCollection++
-		wc.currentCollection = NewWalFileCollection(wc.numberCollection, wc.dir, wc.walFileSize, wc.walBufferSize)
+		wc.currentCollection = NewWalFileCollection(wc.dir, wc.walFileSize, wc.walBufferSize)
 	}
 	if err := wc.currentCollection.Write(marshalEntity); err != nil {
 		return err

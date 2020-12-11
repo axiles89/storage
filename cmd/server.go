@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -101,6 +102,14 @@ func main() {
 	}
 
 	db, _ := storage_db.NewStorage(&config, storage_db.GetLogger())
+
+	for i := 1; i < 10000; i++ {
+		b := make([]byte, 8)
+		binary.BigEndian.PutUint64(b, uint64(i))
+		db.Set(b, b)
+	}
+
+	os.Exit(1)
 
 	db.Set([]byte("n"), []byte("value"))
 	db.Set([]byte("n"), []byte("value"))
